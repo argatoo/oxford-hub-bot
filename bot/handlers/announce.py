@@ -14,10 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.callbacks import AnnCb, AnnDelCb
 from bot.db.models import Announcement, AnnouncementMessage, Group, User
 from bot.filters import CanAnnounce, can_announce, is_admin
-from bot.handlers.admin import group_sort_key
 from bot.i18n import t
 from bot.services.broadcast import broadcast
-from bot.services.common import q
+from bot.services.common import group_sort_key, q
 
 router = Router(name="announce")
 router.message.filter(F.chat.type == ChatType.PRIVATE)
@@ -28,7 +27,7 @@ class AnnounceSG(StatesGroup):
     targets = State()
 
 
-async def _active_groups(session: AsyncSession) -> list[Group]:
+async def active_groups(session: AsyncSession) -> list[Group]:
     return sorted((await session.scalars(select(Group).where(Group.is_active))).all(), key=group_sort_key)
 
 
@@ -64,7 +63,7 @@ def _targets_keyboard(lang: str, groups: list[Group], selected: set[int], pin: b
 
 @router.message(Command("announce"), CanAnnounce())
 async def cmd_announce(message: Message, state: FSMContext, session: AsyncSession, lang: str):
-    if not await _active_groups(session):
+    if not await active_groups(session):
         await message.answer(t(lang, "groups_empty"))
         return
     await state.clear()
@@ -83,7 +82,7 @@ async def on_content(message: Message, state: FSMContext, session: AsyncSession,
             await state.update_data(warned_album=message.media_group_id)
             await message.answer(t(lang, "ann_no_albums"))
         return
-    groups = await _active_groups(session)
+    groups = await active_groups(session)
     await state.update_data(src_chat=message.chat.id, src_msg=message.message_id, selected=[], pin=False)
     await state.set_state(AnnounceSG.targets)
     await message.answer(
@@ -102,7 +101,7 @@ async def on_targets(
     data = await state.get_data()
     selected: set[int] = set(data.get("selected", []))
     pin: bool = data.get("pin", False)
-    groups = await _active_groups(session)
+    groups = await active_groups(session)
     action = callback_data.action
 
     if action == "cancel":
@@ -160,7 +159,7 @@ async def _do_send(status_msg: Message, session: AsyncSession, bot: Bot, user: U
         session.add(AnnouncementMessage(announcement_id=ann.id, chat_id=chat_id, message_id=message_id))
     await session.commit()
 
-    labels = {g.chat_id: g.label for g in await _active_groups(session)}
+    labels = {g.chat_id: g.label for g in await active_groups(session)}
     lines = [t(lang, "ann_report", sent=len(result.sent), total=len(chat_ids))]
     if result.failed:
         names = ", ".join(q(labels.get(c, str(c))) for c in result.failed)

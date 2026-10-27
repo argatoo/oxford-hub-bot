@@ -5,24 +5,16 @@ from contextlib import asynccontextmanager
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats, Update
+from aiogram.types import BotCommandScopeAllPrivateChats, Update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from bot.config import settings
 from bot.db.session import ensure_schema, make_engine, reset_sessionmaker, use_sessionmaker
-from bot.handlers import admin, announce, calls, groups, start
+from bot.handlers import admin, admin_panel, announce, calls, groups, start
 from bot.middlewares import DbMiddleware
 from bot.services.calls import run_periodic
+from bot.services.menus import COMMANDS, as_commands
 from bot.storage import SqlStorage
-
-COMMANDS = {
-    "uz": [("start", "Boshlash"), ("help", "Yordam"), ("announce", "E'lon yuborish"),
-           ("me", "Mening ma'lumotlarim"), ("lang", "Tilni o'zgartirish"), ("cancel", "Bekor qilish")],
-    "ru": [("start", "Начать"), ("help", "Помощь"), ("announce", "Отправить объявление"),
-           ("me", "Мои данные"), ("lang", "Сменить язык"), ("cancel", "Отмена")],
-    "en": [("start", "Start"), ("help", "Help"), ("announce", "Send an announcement"),
-           ("me", "My profile"), ("lang", "Change language"), ("cancel", "Cancel")],
-}
 
 # Shown in Telegram before the first /start ("What can this bot do?") and on the bot's profile.
 DESCRIPTIONS = {
@@ -63,6 +55,7 @@ def get_dispatcher() -> Dispatcher:
         dp.include_routers(
             start.router,
             admin.router,
+            admin_panel.router,
             announce.router,
             groups.router,
             calls.router,
@@ -83,7 +76,7 @@ async def set_commands(bot: Bot) -> None:
     """Command menu and profile description, per language (the default language also as fallback)."""
     scope = BotCommandScopeAllPrivateChats()
     for lang, items in COMMANDS.items():
-        commands = [BotCommand(command=c, description=d) for c, d in items]
+        commands = as_commands(items)
         description, short = DESCRIPTIONS[lang]
         for code in (lang, None) if lang == settings.default_lang else (lang,):
             await bot.set_my_commands(commands, scope=scope, language_code=code)

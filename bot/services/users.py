@@ -6,6 +6,21 @@ from bot.i18n import t
 from bot.services.common import q
 
 
+async def add_staff_role(session: AsyncSession, user_id: int, role_id: int, floor_id: int | None) -> bool:
+    """Adds the role unless the user already has it on that floor. Caller commits."""
+    existing = await session.scalar(
+        select(StaffRole).where(
+            StaffRole.user_id == user_id,
+            StaffRole.role_id == role_id,
+            StaffRole.floor_id.is_(None) if floor_id is None else StaffRole.floor_id == floor_id,
+        )
+    )
+    if existing:
+        return False
+    session.add(StaffRole(user_id=user_id, role_id=role_id, floor_id=floor_id))
+    return True
+
+
 async def user_badges(session: AsyncSession, user: User, lang: str) -> list[str]:
     badges = []
     if user.is_admin:

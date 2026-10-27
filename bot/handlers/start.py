@@ -8,11 +8,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.callbacks import FloorPickCb, LangCb
-from bot.db.models import Floor, Invite, Role, StaffRole, User
+from bot.db.models import Floor, Invite, Role, User
 from bot.filters import can_announce, can_call, is_admin
 from bot.i18n import LANG_LABELS, t
 from bot.services.common import notify_admins, q, user_link
-from bot.services.users import user_badges
+from bot.services.menus import set_user_menu
+from bot.services.users import add_staff_role, user_badges
 
 router = Router(name="start")
 router.message.filter(F.chat.type == ChatType.PRIVATE)
@@ -38,7 +39,7 @@ async def welcome_text(session: AsyncSession, user: User) -> str:
         lines.append(t(lang, "your_roles", roles=", ".join(badges)))
     else:
         lines.append(t(lang, "no_roles_yet", id=user.id))
-    lines.append(t(lang, "see_help"))
+    lines.append(t(lang, "see_admin") if user.is_admin else t(lang, "see_help"))
     return "\n\n".join(lines)
 
 
@@ -47,6 +48,7 @@ async def cmd_start(
     message: Message, command: CommandObject, session: AsyncSession, user: User, state: FSMContext, bot: Bot
 ):
     await state.clear()
+    await set_user_menu(bot, user)
     if not user.lang_chosen:
         await state.update_data(pending_code=command.args)
         await message.answer(t(user.lang, "choose_lang"), reply_markup=lang_keyboard())
@@ -69,6 +71,7 @@ async def on_lang(
     user.lang = callback_data.code
     user.lang_chosen = True
     await session.commit()
+    await set_user_menu(bot, user)  # admin menu follows the chosen language
     await cb.message.edit_text(t(user.lang, "lang_set"))
     await cb.answer()
 
@@ -115,8 +118,10 @@ async def apply_invite(bot: Bot, session: AsyncSession, user: User, code: str, r
         if role.floor_based and inv.floor_id is None and floors:
             ask_floor = True
         else:
-            await _add_staff_role(session, user.id, role.id, inv.floor_id)
+            await add_staff_role(session, user.id, role.id, inv.floor_id)
     await session.commit()
+    if inv.kind == "admin":
+        await set_user_menu(bot, user)
 
     await reply_to.answer(t(lang, "inv_ok", what=what))
     if ask_floor:
@@ -132,20 +137,6 @@ async def apply_invite(bot: Bot, session: AsyncSession, user: User, code: str, r
     await notify_admins(bot, session, "adm_new_member", user=user_link(user), what=what)
 
 
-async def _add_staff_role(session: AsyncSession, user_id: int, role_id: int, floor_id: int | None) -> bool:
-    existing = await session.scalar(
-        select(StaffRole).where(
-            StaffRole.user_id == user_id,
-            StaffRole.role_id == role_id,
-            StaffRole.floor_id.is_(None) if floor_id is None else StaffRole.floor_id == floor_id,
-        )
-    )
-    if existing:
-        return False
-    session.add(StaffRole(user_id=user_id, role_id=role_id, floor_id=floor_id))
-    return True
-
-
 @router.callback_query(FloorPickCb.filter())
 async def on_floor_pick(cb: CallbackQuery, callback_data: FloorPickCb, session: AsyncSession, user: User):
     role = await session.get(Role, callback_data.role_id)
@@ -153,7 +144,7 @@ async def on_floor_pick(cb: CallbackQuery, callback_data: FloorPickCb, session: 
         await cb.answer()
         return
     floor = await session.get(Floor, callback_data.floor_id) if callback_data.floor_id else None
-    await _add_staff_role(session, user.id, role.id, floor.id if floor else None)
+    await add_staff_role(session, user.id, role.id, floor.id if floor else None)
     await session.commit()
     floor_name = q(floor.name) if floor else t(user.lang, "all_floors")
     await cb.message.edit_text(t(user.lang, "floor_picked", role=q(role.title), floor=floor_name))

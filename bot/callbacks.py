@@ -22,3 +22,13 @@ class AnnCb(CallbackData, prefix="ann"):
 
 class AnnDelCb(CallbackData, prefix="anndel"):
     ann_id: int
+
+
+class AdmCb(CallbackData, prefix="adm"):
+    """Admin panel navigation. `s` is the screen; the rest carry what that screen needs."""
+
+    s: str
+    a: str = ""  # kind ("teacher", "role", …) or an invite code
+    v: int = 0   # role / floor id
+    w: int = 0   # number of uses, or days for stats
+    f: int = 0   # floor id for an invite (0 = staff member picks)

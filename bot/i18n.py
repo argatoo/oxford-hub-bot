@@ -129,7 +129,7 @@ TEXTS: dict[str, dict[str, str]] = {
     },
     "help_admin": {
         "uz": (
-            "<b>⚙️ Admin buyruqlari</b>\n\n"
+            "<b>⚙️ Admin buyruqlari</b>\nTugmali panel: /admin\n\n"
             "<b>Rollar</b>\n"
             "/roles — rollar ro'yxati\n"
             "<code>/addrole cleaner 🧹 Tozalovchi</code> — yangi rol\n"
@@ -156,7 +156,7 @@ TEXTS: dict[str, dict[str, str]] = {
             "<code>/stats 7</code> — oxirgi 7 kunlik chaqiruvlar"
         ),
         "ru": (
-            "<b>⚙️ Команды администратора</b>\n\n"
+            "<b>⚙️ Команды администратора</b>\nПанель с кнопками: /admin\n\n"
             "<b>Роли</b>\n"
             "/roles — список ролей\n"
             "<code>/addrole cleaner 🧹 Уборщица</code> — новая роль\n"
@@ -183,7 +183,7 @@ TEXTS: dict[str, dict[str, str]] = {
             "<code>/stats 7</code> — вызовы за последние 7 дней"
         ),
         "en": (
-            "<b>⚙️ Admin commands</b>\n\n"
+            "<b>⚙️ Admin commands</b>\nButton panel: /admin\n\n"
             "<b>Roles</b>\n"
             "/roles — list roles\n"
             "<code>/addrole cleaner 🧹 Cleaner</code> — new role\n"
@@ -210,6 +210,116 @@ TEXTS: dict[str, dict[str, str]] = {
             "<code>/stats 7</code> — calls over the last 7 days"
         ),
     },
+
+    # ---------- Admin panel (buttons) ----------
+    "see_admin": {
+        "uz": "⚙️ Admin panel: /admin · Barcha buyruqlar: /help",
+        "ru": "⚙️ Админ-панель: /admin · Все команды: /help",
+        "en": "⚙️ Admin panel: /admin · All commands: /help",
+    },
+    "panel_title": {
+        "uz": "⚙️ <b>Admin panel</b>\nBo'limni tanlang:",
+        "ru": "⚙️ <b>Админ-панель</b>\nВыберите раздел:",
+        "en": "⚙️ <b>Admin panel</b>\nChoose a section:",
+    },
+    "btn_roles": {"uz": "🏷 Rollar", "ru": "🏷 Роли", "en": "🏷 Roles"},
+    "btn_floors": {"uz": "🏢 Qavatlar", "ru": "🏢 Этажи", "en": "🏢 Floors"},
+    "btn_staff": {"uz": "👥 Xodimlar", "ru": "👥 Сотрудники", "en": "👥 Staff"},
+    "btn_groups": {"uz": "🏫 Guruhlar", "ru": "🏫 Группы", "en": "🏫 Groups"},
+    "btn_announce": {"uz": "📢 E'lon", "ru": "📢 Объявление", "en": "📢 Announcement"},
+    "btn_stats": {"uz": "📊 Statistika", "ru": "📊 Статистика", "en": "📊 Statistics"},
+    "btn_back": {"uz": "⬅️ Orqaga", "ru": "⬅️ Назад", "en": "⬅️ Back"},
+    "btn_add_role": {"uz": "➕ Rol qo'shish", "ru": "➕ Добавить роль", "en": "➕ Add role"},
+    "btn_add_floor": {"uz": "➕ Qavat qo'shish", "ru": "➕ Добавить этаж", "en": "➕ Add floor"},
+    "btn_invite": {"uz": "🔗 Taklif havolasi", "ru": "🔗 Ссылка-приглашение", "en": "🔗 Invite link"},
+    "btn_more_invite": {"uz": "🔗 Yana havola", "ru": "🔗 Ещё ссылка", "en": "🔗 Another link"},
+    "btn_invites": {"uz": "📋 Faol havolalar", "ru": "📋 Активные ссылки", "en": "📋 Active links"},
+    "btn_staff_list": {"uz": "👥 Xodimlari", "ru": "👥 Сотрудники", "en": "👥 Its staff"},
+    "btn_delete": {"uz": "🗑 O'chirish", "ru": "🗑 Удалить", "en": "🗑 Delete"},
+    "btn_confirm_delete": {"uz": "✅ Ha, o'chirish", "ru": "✅ Да, удалить", "en": "✅ Yes, delete"},
+    "btn_floor_on": {
+        "uz": "🏢 Qavat bo'yicha: ✅ yoqilgan",
+        "ru": "🏢 По этажам: ✅ включено",
+        "en": "🏢 By floor: ✅ on",
+    },
+    "btn_floor_off": {
+        "uz": "🏢 Qavat bo'yicha: o'chiq",
+        "ru": "🏢 По этажам: выключено",
+        "en": "🏢 By floor: off",
+    },
+    "btn_refresh": {"uz": "🔄 Yangilash", "ru": "🔄 Обновить", "en": "🔄 Refresh"},
+    "ask_role_input": {
+        "uz": "Yangi rolni bitta xabarda yuboring: <b>kalit</b>, emoji va nom.\nMasalan: <code>cleaner 🧹 Tozalovchi</code>\n\nKalit — guruhda yoziladigan teg (#cleaner). Bekor qilish: /cancel",
+        "ru": "Отправьте новую роль одним сообщением: <b>ключ</b>, эмодзи и название.\nНапример: <code>cleaner 🧹 Уборщица</code>\n\nКлюч — тег, который пишут в группе (#cleaner). Отмена: /cancel",
+        "en": "Send the new role in one message: <b>key</b>, emoji and name.\nExample: <code>cleaner 🧹 Cleaner</code>\n\nThe key is the tag written in groups (#cleaner). Cancel: /cancel",
+    },
+    "ask_floor_input": {
+        "uz": "Qavat nomini yuboring, masalan: <code>2-qavat</code>\nBekor qilish: /cancel",
+        "ru": "Отправьте название этажа, например: <code>2-этаж</code>\nОтмена: /cancel",
+        "en": "Send the floor name, for example: <code>Floor 2</code>\nCancel: /cancel",
+    },
+    "role_detail": {
+        "uz": "<b>{title}</b>\nTeglar: {triggers}\nXodimlar: {n}\n{mode}",
+        "ru": "<b>{title}</b>\nТеги: {triggers}\nСотрудников: {n}\n{mode}",
+        "en": "<b>{title}</b>\nTags: {triggers}\nStaff: {n}\n{mode}",
+    },
+    "role_mode_floor": {
+        "uz": "🏢 Chaqiruv sinf joylashgan qavatdagi xodimga boradi.",
+        "ru": "🏢 Вызов идёт сотруднику этажа, где находится класс.",
+        "en": "🏢 Calls go to staff on the class's floor.",
+    },
+    "role_mode_all": {
+        "uz": "Chaqiruv shu roldagi barcha xodimlarga boradi.",
+        "ru": "Вызов идёт всем сотрудникам этой роли.",
+        "en": "Calls go to all staff with this role.",
+    },
+    "confirm_delete_role": {
+        "uz": "{title} rolini o'chirasizmi?\nUnga biriktirilgan xodimlar roldan chiqariladi, havolalari bekor bo'ladi.",
+        "ru": "Удалить роль {title}?\nСотрудники будут сняты с роли, ссылки-приглашения отменены.",
+        "en": "Delete the role {title}?\nIts staff lose the role and its invite links are cancelled.",
+    },
+    "confirm_delete_floor": {
+        "uz": "«{name}» qavatini o'chirasizmi?\nSinflar va xodimlar bu qavatdan ajratiladi.",
+        "ru": "Удалить этаж «{name}»?\nКлассы и сотрудники будут отвязаны от этого этажа.",
+        "en": "Delete the floor “{name}”?\nClasses and staff will be detached from it.",
+    },
+    "inv_pick_target": {
+        "uz": "🔗 Havola kim uchun?",
+        "ru": "🔗 Для кого ссылка?",
+        "en": "🔗 Who is the link for?",
+    },
+    "inv_pick_uses": {
+        "uz": "{what}: havoladan necha kishi foydalana oladi?",
+        "ru": "{what}: сколько человек может воспользоваться ссылкой?",
+        "en": "{what}: how many people can use the link?",
+    },
+    "inv_uses_n": {"uz": "{n} kishi", "ru": "{n} чел.", "en": "{n} people"},
+    "inv_pick_floor": {
+        "uz": "{what}: qaysi qavat uchun?",
+        "ru": "{what}: для какого этажа?",
+        "en": "{what}: which floor?",
+    },
+    "inv_floor_any": {
+        "uz": "Xodim o'zi tanlaydi",
+        "ru": "Сотрудник выберет сам",
+        "en": "Staff member picks",
+    },
+    "staff_menu": {
+        "uz": "👥 <b>Xodimlar</b>\nRo'yxatni ko'rish uchun tanlang:",
+        "ru": "👥 <b>Сотрудники</b>\nВыберите, чей список показать:",
+        "en": "👥 <b>Staff</b>\nChoose which list to show:",
+    },
+    "staff_remove_hint": {
+        "uz": "Rolni olib qo'yish: <code>/unassign ID rol</code>, masalan <code>/unassign 123456789 teacher</code>",
+        "ru": "Снять роль: <code>/unassign ID роль</code>, например <code>/unassign 123456789 teacher</code>",
+        "en": "Remove a role: <code>/unassign ID role</code>, e.g. <code>/unassign 123456789 teacher</code>",
+    },
+    "list_cut": {
+        "uz": "…va yana {n} qator. To'liq ro'yxat uchun buyruqdan foydalaning (/staff, /groups).",
+        "ru": "…и ещё {n} строк. Полный список — командой (/staff, /groups).",
+        "en": "…and {n} more lines. Use the command for the full list (/staff, /groups).",
+    },
+    "stats_days": {"uz": "{n} kun", "ru": "{n} дн.", "en": "{n} days"},
 
     # ---------- Roles ----------
     "roles_empty": {

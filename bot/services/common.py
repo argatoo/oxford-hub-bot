@@ -36,6 +36,10 @@ def parse_class(title: str) -> tuple[int, str] | None:
     return grade, f"{grade}-{m.group(2).upper()}"
 
 
+def group_sort_key(g: Group):
+    return (g.grade or 99, g.label)
+
+
 async def ensure_group(session: AsyncSession, chat: Chat) -> Group:
     group = await session.get(Group, chat.id)
     if group is None:

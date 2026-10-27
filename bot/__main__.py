@@ -8,6 +8,7 @@ from bot.app import get_dispatcher, make_bot, set_commands
 from bot.config import settings
 from bot.db.session import init_db, make_engine, use_sessionmaker
 from bot.services.calls import periodic_loop
+from bot.services.menus import sync_admin_menus
 
 
 async def main() -> None:
@@ -34,6 +35,8 @@ async def main() -> None:
     dp = get_dispatcher()
 
     await set_commands(bot)
+    async with sessionmaker() as session:
+        await sync_admin_menus(bot, session)
     me = await bot.me()
     logging.info("Bot @%s started (polling)", me.username)
 

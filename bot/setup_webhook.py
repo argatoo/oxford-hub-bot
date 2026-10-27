@@ -13,10 +13,12 @@ import sys
 from pathlib import Path
 
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from bot.app import get_dispatcher, make_bot, set_commands
 from bot.config import settings
 from bot.db.session import ensure_schema, make_engine
+from bot.services.menus import sync_admin_menus
 
 CRON_JOB = "oxford-bot-tick"
 SECRET_RE = re.compile(r"^[A-Za-z0-9_-]{16,256}$")
@@ -75,6 +77,8 @@ async def main(base_url: str) -> None:
             allowed_updates=get_dispatcher().resolve_used_update_types(),
         )
         await set_commands(bot)
+        async with async_sessionmaker(engine)() as session:
+            await sync_admin_menus(bot, session)
         info = await bot.get_webhook_info()
         me = await bot.me()
         print(f"   ✅ @{me.username} → {info.url}")
