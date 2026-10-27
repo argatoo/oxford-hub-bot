@@ -1,0 +1,120 @@
+import logging
+
+from aiogram import Bot, F, Router
+from aiogram.enums import ChatMemberStatus, ChatType
+from aiogram.filters import Command, CommandObject
+from aiogram.types import ChatMemberUpdated, Message
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from bot.config import LANGS
+from bot.db.models import Floor, User
+from bot.filters import IsAdmin, is_admin
+from bot.i18n import t
+from bot.services.common import ensure_group, find_floor, migrate_group, notify_admins, parse_class, q
+
+log = logging.getLogger(__name__)
+
+GROUP_TYPES = {ChatType.GROUP, ChatType.SUPERGROUP}
+
+router = Router(name="groups")
+router.message.filter(F.chat.type.in_(GROUP_TYPES))
+
+GONE = {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED}
+
+
+@router.my_chat_member(F.chat.type.in_(GROUP_TYPES))
+async def on_bot_membership(event: ChatMemberUpdated, session: AsyncSession, user: User | None, bot: Bot):
+    old, new = event.old_chat_member.status, event.new_chat_member.status
+
+    if new in GONE:
+        group = await ensure_group(session, event.chat)
+        group.is_active = False
+        await session.commit()
+        await notify_admins(bot, session, "adm_group_removed", title=q(group.title))
+        return
+
+    joined = old in GONE
+    if joined and not is_admin(user):
+        # Only school admins may add the bot, otherwise any random group would land in the broadcast list.
+        try:
+            await bot.send_message(event.chat.id, t("uz", "only_admin_can_add"))
+            await bot.leave_chat(event.chat.id)
+        except Exception as e:
+            log.warning("Could not leave %s: %s", event.chat.id, e)
+        return
+
+    group = await ensure_group(session, event.chat)
+    group.is_active = True
+    group.bot_is_admin = new in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR)
+    await session.commit()
+
+    if joined:
+        await notify_admins(
+            bot, session, "adm_group_added",
+            title=q(group.title),
+            cls=q(group.class_name or "—"),
+        )
+        if not group.bot_is_admin:
+            await bot.send_message(event.chat.id, t(group.lang, "make_me_admin"))
+    elif not group.bot_is_admin:
+        await notify_admins(bot, session, "adm_group_not_admin", title=q(group.title))
+
+
+@router.message(F.migrate_to_chat_id)
+async def on_migrate(message: Message, session: AsyncSession):
+    await migrate_group(session, message.chat.id, message.migrate_to_chat_id)
+
+
+@router.message(Command("setclass"), IsAdmin())
+async def cmd_setclass(message: Message, command: CommandObject, session: AsyncSession):
+    group = await ensure_group(session, message.chat)
+    parsed = parse_class(command.args or "")
+    if parsed is None:
+        await message.reply(t(group.lang, "usage_setclass"))
+        return
+    group.grade, group.class_name = parsed
+    await session.commit()
+    await message.reply(t(group.lang, "class_set", cls=group.class_name))
+
+
+@router.message(Command("setfloor"), IsAdmin())
+async def cmd_setfloor(message: Message, command: CommandObject, session: AsyncSession):
+    group = await ensure_group(session, message.chat)
+    name = (command.args or "").strip()
+    floor = await find_floor(session, name) if name else None
+    if floor is None:
+        await message.reply(t(group.lang, "floor_not_found"))
+        return
+    group.floor_id = floor.id
+    await session.commit()
+    await message.reply(t(group.lang, "floor_set", cls=q(group.label), floor=q(floor.name)))
+
+
+@router.message(Command("grouplang"), IsAdmin())
+async def cmd_grouplang(message: Message, command: CommandObject, session: AsyncSession):
+    group = await ensure_group(session, message.chat)
+    code = (command.args or "").strip().lower()
+    if code not in LANGS:
+        await message.reply(t(group.lang, "usage_grouplang"))
+        return
+    group.lang = code
+    await session.commit()
+    await message.reply(t(group.lang, "lang_set"))
+
+
+@router.message(Command("groupinfo"), IsAdmin())
+async def cmd_groupinfo(message: Message, session: AsyncSession, bot: Bot):
+    group = await ensure_group(session, message.chat)
+    member = await bot.get_chat_member(message.chat.id, bot.id)
+    group.bot_is_admin = member.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR)
+    await session.commit()
+    floor = await session.get(Floor, group.floor_id) if group.floor_id else None
+    await message.reply(t(
+        group.lang, "groupinfo",
+        title=q(group.title),
+        cls=q(group.class_name or "—"),
+        floor=q(floor.name) if floor else "—",
+        lang=group.lang,
+        admin="✅" if group.bot_is_admin else "❌",
+        id=group.chat_id,
+    ))

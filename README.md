@@ -1,0 +1,181 @@
+# Oxford International School — Telegram bot
+
+Sinf guruhlarini boshqarish uchun bot:
+
+- **📢 E'lonlar**: bir klikda barcha guruhlarga, parallel bo'yicha (masalan, hamma 9-sinflarga) yoki tanlangan guruhlarga yuboriladi. Pin qilish mumkin, kerak bo'lsa hamma guruhlardan bir klikda o'chiriladi.
+- **🧹 Xodimni chaqirish**: o'qituvchi guruhda `#cleaner suv to'kildi` deb yozadi va xabar shu roldagi xodimning shaxsiy chatiga boradi. Xodim «Qabul qilaman» va «Bajarildi» tugmalarini bosadi, guruhda esa holat ko'rinib turadi.
+- **🏢 Qavatlar**: qavat bo'yicha ishlaydigan rollar (masalan, cleaner) faqat sinf joylashgan qavatdagi xodimga boradi.
+- **⚠️ Eskalatsiya**: chaqiruvni 5 daqiqa ichida hech kim qabul qilmasa (shoshilinch chaqiruvda 2 daqiqa), adminlarga xabar boradi.
+- **🌐 3 til**: o'zbekcha, ruscha va inglizcha. Har kim o'z tilini tanlaydi, guruh tili esa alohida sozlanadi.
+
+---
+
+Bot ikki xil usulda ishlaydi:
+- **Kompyuterda** (sinab ko'rish uchun): `run.bat` orqali. Bot kompyuter yoqiq turgan paytda ishlaydi.
+- **Vercel + Supabase'da** (doimiy ishlash uchun): kompyuter kerak emas, 24/7 ishlaydi. Qo'llanma 4-bo'limda.
+
+## 1. Kompyuterda ishga tushirish
+
+1. [@BotFather](https://t.me/BotFather) da `/newbot` buyrug'i bilan bot yarating va tokenni oling.
+2. O'sha joyda `/mybots` → botingiz → **Bot Settings → Group Privacy → Turn off** ni bosing. Shunda bot guruhdagi `#cleaner` kabi teglarni ko'ra oladi.
+3. `.env.example` faylidan nusxa olib, `.env` deb nomlang va ichiga quyidagilarni yozing:
+   - `BOT_TOKEN`: BotFather bergan token
+   - `ADMIN_IDS`: bosh admin(lar)ning Telegram ID raqami. ID ni bilmasangiz, avval botni ishga tushiring, botga `/me` yozing, so'ng ID ni shu yerga qo'yib, botni qayta ishga tushiring.
+4. `run.bat` faylini ikki marta bosing. Birinchi marta kutubxonalar o'rnatiladi, keyin bot ishga tushadi.
+
+Qo'lda ishga tushirish:
+
+```bash
+python -m venv .venv
+```
+```bash
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+```bash
+.venv\Scripts\python.exe -m bot
+```
+
+> Bot faqat kompyuter yoqiq va `run.bat` oynasi ochiq turgan paytda ishlaydi.
+
+## 2. Birinchi sozlash (admin, bot bilan shaxsiy chatda)
+
+```
+/addrole cleaner 🧹 Tozalovchi
+/addrole doctor 🩺 Shifokor
+/addrole inspector 🛡 Inspektor
+/rolefloor cleaner on          ← cleaner qavat bo'yicha ishlaydi
+/alias cleaner clean tozalash  ← #clean va #tozalash ham ishlaydi
+
+/addfloor 1-qavat
+/addfloor 2-qavat
+/addfloor 3-qavat
+```
+
+### Xodimlarni qo'shish (taklif havolalari)
+
+```
+/invite teacher 60             ← barcha o'qituvchilar uchun bitta havola (60 kishiga)
+/invite cleaner 1 2-qavat      ← 2-qavat tozalovchisi uchun
+/invite doctor                 ← shifokor uchun
+/invite announcer              ← e'lon yubora oladigan shaxs uchun
+```
+
+Bot havola beradi. Uni xodimga yuborasiz, xodim havolani bosadi va avtomatik ro'yxatdan o'tadi. Har bir yangi xodim haqida adminlarga xabar keladi.
+
+> ⚠️ Bot xodimga xabar yubora olishi uchun xodim botni **kamida bir marta** ochgan bo'lishi shart. Taklif havolasi orqali kirganda bu avtomatik bajariladi.
+
+### Guruhlarni ulash
+
+1. Botni har bir sinf guruhiga qo'shing va **admin** qiling. Botni faqat admin qo'sha oladi, boshqa odam qo'shsa bot guruhdan chiqib ketadi.
+2. Bot sinfni guruh nomidan o'zi aniqlaydi (masalan, «7-B sinf» → `7-B`). Aniqlay olmasa, guruh ichida yozing: `/setclass 7-B`
+3. Guruh ichida qavatni belgilang: `/setfloor 2-qavat`
+4. Hammasini tekshirish uchun shaxsiy chatda `/groups` ni yozing.
+
+## 3. Kundalik foydalanish
+
+**O'qituvchi** (sinf guruhida):
+
+| Yozadi | Natija |
+|---|---|
+| `#cleaner partada suv to'kilgan` | 2-qavat tozalovchisiga boradi |
+| `/doctor` | shifokorga boradi |
+| `#doctor! bola yiqildi` | 🚨 shoshilinch chaqiruv |
+| biror xabarga reply qilib `#inspector` | o'sha xabar ham inspektorga boradi |
+
+**E'lon beruvchi** (shaxsiy chatda): `/announce` → e'lonni yuboring → guruhlarni tanlang → 📤 Yuborish.
+
+**Admin**: barcha buyruqlar ro'yxati `/admin` da. Statistika uchun `/stats 7` ni yozing.
+
+## 4. Vercel + Supabase'ga joylashtirish (24/7)
+
+Bu rejimda vazifalar quyidagicha taqsimlanadi:
+- **Supabase**: ma'lumotlar bazasi. Bundan tashqari, har daqiqada botni "uyg'otib" turadi (Supabase Cron). Bu qabul qilinmagan chaqiruvlarni adminlarga yuborish uchun kerak.
+- **Vercel**: botning kodi. Telegram har bir yangi xabarni Vercel'ga o'zi yuboradi (webhook).
+
+### 4.1. Supabase
+
+1. [supabase.com](https://supabase.com) da **New project** ni bosing. Region uchun **Frankfurt (eu-central-1)** ni tanlang, u O'zbekistonga yaqin. Ma'lumotlar bazasi parolini saqlab qo'ying.
+   > Parolda faqat harf va raqam ishlating. `@ # / ?` kabi belgilar ulanish manzilini buzadi.
+2. Loyiha ochilgach, yuqoridagi **Connect** tugmasini bosing va **Transaction pooler** manzilini (port **6543**) nusxalang. Unda `[YOUR-PASSWORD]` o'rniga parolingizni yozing. Bu sizning `DATABASE_URL` manzilingiz bo'ladi.
+
+### 4.2. Maxfiy so'z
+
+Telegram va Supabase botga murojaat qilganini tekshirish uchun maxfiy so'z kerak. Uni yarating:
+
+```bash
+.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+Chiqqan qatorni `WEBHOOK_SECRET` sifatida saqlang.
+
+### 4.3. Vercel
+
+1. Kodni GitHub'ga yuklang. Bunda `.env` fayli yuklanmaydi, chunki u `.gitignore` da.
+2. [vercel.com](https://vercel.com) da **Add New → Project** ni bosing va GitHub repozitoriyani tanlang. **Framework Preset** maydonida **Other** ni qoldiring.
+3. **Environment Variables** bo'limiga quyidagilarni qo'shing:
+
+   | Nomi | Qiymati |
+   |---|---|
+   | `BOT_TOKEN` | BotFather bergan token |
+   | `ADMIN_IDS` | bosh adminlar ID raqamlari, vergul bilan |
+   | `DATABASE_URL` | 4.1-bo'limdagi Supabase manzili |
+   | `WEBHOOK_SECRET` | 4.2-bo'limdagi maxfiy so'z |
+
+4. **Deploy** ni bosing. Tayyor bo'lgach, loyihaning asosiy manzilini nusxalang, masalan `https://oxford-bot.vercel.app`. Bu **Domains** bo'limidagi manzil bo'lishi kerak, "preview" manzil emas.
+
+### 4.4. Ulash (bir marta, kompyuterdan)
+
+`.env` faylida ham `DATABASE_URL` va `WEBHOOK_SECRET` xuddi Vercel'dagidek bo'lishi kerak. Keyin quyidagini ishga tushiring:
+
+```bash
+.venv\Scripts\python.exe -m bot.setup_webhook https://oxford-bot.vercel.app
+```
+
+Bu buyruq uchta ishni bajaradi:
+1. Supabase'da jadvallarni yaratadi.
+2. Telegram'ga botning Vercel'dagi manzilini beradi.
+3. Supabase Cron'ni har daqiqada botni chaqiradigan qilib sozlaydi.
+
+Agar 3-qadam bajarilmasa, buyruq nima qilish kerakligini aytadi: Supabase'da `pg_cron` va `pg_net` kengaytmalarini yoqib, [supabase/cron.sql](supabase/cron.sql) faylidagi so'rovni SQL Editor'da bajarasiz.
+
+**Tekshirish:** brauzerda `https://oxford-bot.vercel.app/api` ni oching. "bot is running" yozuvi chiqishi kerak. Keyin botga Telegram'da `/start` yozing.
+
+### Bilib qo'yish kerak bo'lgan narsalar
+
+- Vercel'da ishlayotgan paytda `run.bat` ni ishga tushirsangiz, bot to'xtaydi va ogohlantiradi, chunki ikki joyda bir vaqtda ishlay olmaydi. Kompyuterda sinash kerak bo'lsa, `python -m bot --force-polling` buyrug'ini ishlating. Keyin Vercel'ga qaytarish uchun `setup_webhook` buyrug'ini qayta bajaring.
+- Kodni o'zgartirib GitHub'ga yuklasangiz, Vercel o'zi qayta joylaydi. `setup_webhook` ni qayta bajarish shart emas.
+- "Faqat o'qituvchilar chaqira oladi" ogohlantirishi guruhdan taxminan 1 daqiqada o'chadi, chunki u Supabase Cron bilan birga ishlaydi.
+- **Narxlar:** Vercel'ning bepul Hobby tarifi faqat shaxsiy va notijorat loyihalar uchun. Xususiy maktab uchun Pro tarifi talab qilinishi mumkin. Supabase'ning bepul loyihasi uzoq vaqt ishlatilmasa, pauzaga tushadi.
+
+## 5. Testlar
+
+```bash
+.venv\Scripts\python.exe -m pip install pytest pytest-asyncio
+```
+```bash
+.venv\Scripts\python.exe -m pytest
+```
+
+## Loyiha tuzilmasi
+
+```
+api/index.py           Vercel kirish nuqtasi
+supabase/cron.sql      Supabase Cron (qo'lda sozlash uchun)
+bot/
+  __main__.py          kompyuterda ishga tushirish (polling)
+  webhook.py           Vercel uchun: Telegram webhook va cron so'rovlari
+  setup_webhook.py     Vercel + Supabase'ni bir marta ulash
+  app.py               ikkala rejim uchun umumiy sozlash
+  storage.py           suhbat holati (e'lon qoralamasi) bazada
+  config.py            .env sozlamalari
+  i18n.py              uz/ru/en matnlar
+  db/models.py         ma'lumotlar bazasi jadvallari
+  handlers/
+    start.py           /start, til, taklif havolalari, /me, /help
+    admin.py           rollar, qavatlar, xodimlar, /stats
+    groups.py          guruhga qo'shilish, /setclass, /setfloor
+    calls.py           #teg orqali xodim chaqirish
+    announce.py        e'lonlar
+  services/            chaqiruv, e'lon va boshqa mantiq
+tests/                 avtomatik testlar
+```
