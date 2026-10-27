@@ -15,9 +15,9 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "✅ Language: English",
     },
     "welcome": {
-        "uz": "Assalomu alaykum, <b>{name}</b>! 👋\nBu Oxford International School botidir.",
-        "ru": "Здравствуйте, <b>{name}</b>! 👋\nЭто бот Oxford International School.",
-        "en": "Hello, <b>{name}</b>! 👋\nThis is the Oxford International School bot.",
+        "uz": "Assalomu alaykum, <b>{name}</b>! 👋\nMen <b>Oxford Hub</b> — Oxford International School boti.",
+        "ru": "Здравствуйте, <b>{name}</b>! 👋\nЯ <b>Oxford Hub</b> — бот Oxford International School.",
+        "en": "Hello, <b>{name}</b>! 👋\nI'm <b>Oxford Hub</b>, the Oxford International School bot.",
     },
     "your_roles": {
         "uz": "Sizning rollaringiz: {roles}",

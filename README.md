@@ -1,6 +1,6 @@
-# Oxford International School — Telegram bot
+# Oxford Hub — Oxford International School Telegram boti
 
-Sinf guruhlarini boshqarish uchun bot:
+Sinf guruhlarini boshqarish uchun bot (Telegram'da: **Oxford Hub**, `@OxfordSchoolHubBot`):
 
 - **📢 E'lonlar**: bir klikda barcha guruhlarga, parallel bo'yicha (masalan, hamma 9-sinflarga) yoki tanlangan guruhlarga yuboriladi. Pin qilish mumkin, kerak bo'lsa hamma guruhlardan bir klikda o'chiriladi.
 - **🧹 Xodimni chaqirish**: o'qituvchi guruhda `#cleaner suv to'kildi` deb yozadi va xabar shu roldagi xodimning shaxsiy chatiga boradi. Xodim «Qabul qilaman» va «Bajarildi» tugmalarini bosadi, guruhda esa holat ko'rinib turadi.
@@ -16,7 +16,7 @@ Bot ikki xil usulda ishlaydi:
 
 ## 1. Kompyuterda ishga tushirish
 
-1. [@BotFather](https://t.me/BotFather) da `/newbot` buyrug'i bilan bot yarating va tokenni oling.
+1. [@BotFather](https://t.me/BotFather) da `/newbot` buyrug'ini yuboring. Nom so'ralganda `Oxford Hub` deb yozing, username so'ralganda `OxfordSchoolHubBot` deb yozing (band bo'lsa `OIS_HubBot`). Oxirida BotFather token beradi. Maktab logotipini `/setuserpic` buyrug'i bilan botning rasmi qilib qo'yish mumkin. Bot tavsifini esa bot o'zi 3 tilda o'rnatadi.
 2. O'sha joyda `/mybots` → botingiz → **Bot Settings → Group Privacy → Turn off** ni bosing. Shunda bot guruhdagi `#cleaner` kabi teglarni ko'ra oladi.
 3. `.env.example` faylidan nusxa olib, `.env` deb nomlang va ichiga quyidagilarni yozing:
    - `BOT_TOKEN`: BotFather bergan token

@@ -46,7 +46,7 @@ async def handle(method: str, headers: dict[str, str], body: bytes) -> tuple[int
             return 500, "tick failed"
         return 200, "tick ok"
 
-    return 200, "Oxford International School bot is running"
+    return 200, "Oxford Hub bot is running"
 
 
 async def app(scope, receive, send):

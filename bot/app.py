@@ -24,6 +24,31 @@ COMMANDS = {
            ("me", "My profile"), ("lang", "Change language"), ("cancel", "Cancel")],
 }
 
+# Shown in Telegram before the first /start ("What can this bot do?") and on the bot's profile.
+DESCRIPTIONS = {
+    "uz": (
+        "Oxford Hub — Oxford International School boti.\n\n"
+        "📢 Sinf guruhlariga e'lonlar\n"
+        "🧹 O'qituvchilar uchun: tozalovchi, shifokor, inspektor va boshqa xodimlarni bitta teg bilan chaqirish\n\n"
+        "Boshlash uchun /start ni bosing.",
+        "Oxford International School: e'lonlar va xodimlarni chaqirish",
+    ),
+    "ru": (
+        "Oxford Hub — бот Oxford International School.\n\n"
+        "📢 Объявления для групп классов\n"
+        "🧹 Для учителей: вызов уборщицы, врача, инспектора и других сотрудников одним тегом\n\n"
+        "Нажмите /start, чтобы начать.",
+        "Oxford International School: объявления и вызов сотрудников",
+    ),
+    "en": (
+        "Oxford Hub — the Oxford International School bot.\n\n"
+        "📢 Announcements for class groups\n"
+        "🧹 For teachers: call a cleaner, the doctor, an inspector or other staff with one tag\n\n"
+        "Press /start to begin.",
+        "Oxford International School: announcements and staff calls",
+    ),
+}
+
 _dispatcher: Dispatcher | None = None
 _schema_ready = False
 
@@ -55,12 +80,15 @@ def make_bot() -> Bot:
 
 
 async def set_commands(bot: Bot) -> None:
+    """Command menu and profile description, per language (the default language also as fallback)."""
     scope = BotCommandScopeAllPrivateChats()
     for lang, items in COMMANDS.items():
         commands = [BotCommand(command=c, description=d) for c, d in items]
-        await bot.set_my_commands(commands, scope=scope, language_code=lang)
-        if lang == settings.default_lang:
-            await bot.set_my_commands(commands, scope=scope)
+        description, short = DESCRIPTIONS[lang]
+        for code in (lang, None) if lang == settings.default_lang else (lang,):
+            await bot.set_my_commands(commands, scope=scope, language_code=code)
+            await bot.set_my_description(description, language_code=code)
+            await bot.set_my_short_description(short, language_code=code)
 
 
 @asynccontextmanager
