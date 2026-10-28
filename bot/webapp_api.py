@@ -1,0 +1,600 @@
+"""JSON API behind the admin Mini App (public/admin/index.html).
+
+Every request is a POST with the header `Authorization: tma <initData>` and the body
+{"op": "<operation>", "args": {...}}. Telegram signs initData with the bot token, so it
+proves who opened the app; only admins get any data.
+"""
+import json
+import logging
+import re
+import time
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+
+from aiogram import Bot
+from aiogram.enums import ChatMemberStatus
+from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError
+from aiogram.utils.web_app import safe_parse_webapp_init_data
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from bot.app import request_scope
+from bot.config import LANGS, settings, utcnow
+from bot.db.models import Announcement, AnnouncementMessage, Call, Floor, Group, Invite, Role, StaffRole, User
+from bot.i18n import t
+from bot.services import admin_views as views
+from bot.services.broadcast import broadcast, delete_announcement, save_announcement
+from bot.services.calls import refresh_call, set_status
+from bot.services.common import find_floor, group_sort_key, parse_class
+from bot.services.menus import set_user_menu
+from bot.services.roles import is_valid_key, trigger_cache
+from bot.services.users import add_staff_role
+
+log = logging.getLogger(__name__)
+
+# Telegram issues fresh initData every time the app is opened; a day covers a long session.
+INIT_DATA_MAX_AGE = 24 * 3600
+
+
+class ApiError(Exception):
+    def __init__(self, status: int, code: str, message: str = "") -> None:
+        super().__init__(code)
+        self.status, self.code, self.message = status, code, message
+
+
+def _plain(html_text: str) -> str:
+    return re.sub(r"<[^>]+>", "", html_text)
+
+
+@dataclass
+class Ctx:
+    bot: Bot
+    session: AsyncSession
+    user: User
+
+    @property
+    def lang(self) -> str:
+        return self.user.lang
+
+    def error(self, key: str, status: int = 400, **kwargs) -> ApiError:
+        return ApiError(status, key, _plain(t(self.lang, key, **kwargs)))
+
+
+Handler = Callable[[Ctx, dict], Awaitable[object]]
+OPS: dict[str, Handler] = {}
+
+
+def op(name: str):
+    def register(fn: Handler) -> Handler:
+        OPS[name] = fn
+        return fn
+    return register
+
+
+# ---------- Argument helpers ----------
+
+def _int(args: dict, key: str, *, optional: bool = False) -> int | None:
+    value = args.get(key)
+    if value is None and optional:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ApiError(400, "bad_args", f"{key}: integer expected")
+    return value
+
+
+def _str(args: dict, key: str, max_len: int = 255, *, optional: bool = False) -> str | None:
+    value = args.get(key)
+    if value is None and optional:
+        return None
+    if not isinstance(value, str):
+        raise ApiError(400, "bad_args", f"{key}: text expected")
+    return value.strip()[:max_len]
+
+
+def _bool(args: dict, key: str) -> bool:
+    value = args.get(key)
+    if not isinstance(value, bool):
+        raise ApiError(400, "bad_args", f"{key}: true/false expected")
+    return value
+
+
+def _iso(dt: datetime | None) -> str | None:
+    return dt.isoformat() + "Z" if dt else None
+
+
+async def _get(ctx: Ctx, model, key, error_key: str = "webapp_not_found"):
+    obj = await ctx.session.get(model, key) if key is not None else None
+    if obj is None:
+        raise ctx.error(error_key, status=404)
+    return obj
+
+
+# ---------- Entry point ----------
+
+def verify_init_data(init_data: str) -> int:
+    """Returns the Telegram user id if initData is genuine and fresh."""
+    try:
+        data = safe_parse_webapp_init_data(settings.bot_token, init_data)
+    except Exception:
+        raise ApiError(401, "unauthorized")
+    if data.user is None:
+        raise ApiError(401, "unauthorized")
+    if time.time() - data.auth_date.timestamp() > INIT_DATA_MAX_AGE:
+        raise ApiError(401, "expired")
+    return data.user.id
+
+
+async def handle_api(init_data: str, body: bytes) -> tuple[int, dict]:
+    try:
+        user_id = verify_init_data(init_data)
+        try:
+            request = json.loads(body or b"{}")
+        except ValueError:
+            raise ApiError(400, "bad_json")
+        if not isinstance(request, dict) or not isinstance(request.get("args", {}), dict):
+            raise ApiError(400, "bad_args")
+        handler = OPS.get(request.get("op"))
+        if handler is None:
+            raise ApiError(404, "unknown_op")
+
+        async with request_scope() as (bot, sessionmaker):
+            async with sessionmaker() as session:
+                user = await session.get(User, user_id)
+                if user is not None and user.id in settings.admin_ids and not user.is_admin:
+                    user.is_admin = True
+                    await session.commit()
+                if user is None or not user.is_admin:
+                    lang = user.lang if user else settings.default_lang
+                    raise ApiError(403, "forbidden", _plain(t(lang, "webapp_forbidden")))
+                data = await handler(Ctx(bot, session, user), request.get("args") or {})
+        return 200, {"ok": True, "data": data}
+    except ApiError as e:
+        return e.status, {"ok": False, "error": e.code, "message": e.message}
+    except Exception:
+        log.exception("Mini App request failed")
+        return 500, {"ok": False, "error": "server_error"}
+
+
+# ---------- Serializers ----------
+
+def _user_json(user: User, roles: list[StaffRole], me: User) -> dict:
+    return {
+        "id": user.id,
+        "name": user.full_name,
+        "username": user.username,
+        "is_admin": user.is_admin,
+        "can_announce": user.can_announce,
+        "is_teacher": user.is_teacher,
+        "is_super": user.id in settings.admin_ids,
+        "is_me": user.id == me.id,
+        "roles": [{"role_id": r.role_id, "floor_id": r.floor_id} for r in roles],
+    }
+
+
+async def _calls_json(session: AsyncSession, calls: list[Call]) -> list[dict]:
+    role_ids = {c.role_id for c in calls if c.role_id}
+    chat_ids = {c.chat_id for c in calls}
+    user_ids = {c.requester_id for c in calls} | {c.accepted_by for c in calls if c.accepted_by}
+    roles = {r.id: r for r in (await session.scalars(select(Role).where(Role.id.in_(role_ids)))).all()}
+    groups = {g.chat_id: g for g in (await session.scalars(select(Group).where(Group.chat_id.in_(chat_ids)))).all()}
+    users = {u.id: u for u in (await session.scalars(select(User).where(User.id.in_(user_ids)))).all()}
+    return [{
+        "id": c.id,
+        "role": roles[c.role_id].title if c.role_id in roles else "❔",
+        "class": groups[c.chat_id].label if c.chat_id in groups else str(c.chat_id),
+        "status": c.status,
+        "urgent": c.urgent,
+        "escalated": c.escalated,
+        "text": c.text,
+        "requester": users[c.requester_id].full_name if c.requester_id in users else None,
+        "accepter": users[c.accepted_by].full_name if c.accepted_by in users else None,
+        "created_at": _iso(c.created_at),
+        "accepted_at": _iso(c.accepted_at),
+        "done_at": _iso(c.done_at),
+    } for c in calls]
+
+
+def _group_json(g: Group) -> dict:
+    return {
+        "chat_id": g.chat_id,
+        "title": g.title,
+        "class_name": g.class_name,
+        "grade": g.grade,
+        "floor_id": g.floor_id,
+        "lang": g.lang,
+        "bot_is_admin": g.bot_is_admin,
+    }
+
+
+async def _count(session: AsyncSession, model, *where) -> int:
+    return await session.scalar(select(func.count()).select_from(model).where(*where))
+
+
+# ---------- Overview ----------
+
+@op("me")
+async def op_me(ctx: Ctx, args: dict):
+    return {"id": ctx.user.id, "name": ctx.user.full_name, "lang": ctx.user.lang}
+
+
+@op("dashboard")
+async def op_dashboard(ctx: Ctx, args: dict):
+    s = ctx.session
+    groups = (await s.scalars(select(Group).where(Group.is_active))).all()
+    now = utcnow()
+    pending = (await s.scalars(
+        select(Call).where(Call.status == "pending").order_by(Call.created_at.desc()).limit(20)
+    )).all()
+    recent = (await s.scalars(select(Call).order_by(Call.created_at.desc()).limit(8))).all()
+    return {
+        "groups": len(groups),
+        "groups_no_floor": sum(g.floor_id is None for g in groups),
+        "groups_no_class": sum(not g.class_name for g in groups),
+        "groups_not_admin": sum(not g.bot_is_admin for g in groups),
+        "admins": await _count(s, User, User.is_admin),
+        "announcers": await _count(s, User, User.can_announce),
+        "teachers": await _count(s, User, User.is_teacher),
+        "staff": await s.scalar(select(func.count(func.distinct(StaffRole.user_id)))),
+        "roles": await _count(s, Role),
+        "floors": await _count(s, Floor),
+        "calls_day": await _count(s, Call, Call.created_at >= now - timedelta(days=1)),
+        "calls_week": await _count(s, Call, Call.created_at >= now - timedelta(days=7)),
+        "pending": await _calls_json(s, list(pending)),
+        "recent": await _calls_json(s, list(recent)),
+    }
+
+
+# ---------- Roles ----------
+
+@op("roles.list")
+async def op_roles_list(ctx: Ctx, args: dict):
+    counts = await views.staff_counts(ctx.session)
+    return [{
+        "id": r.id, "key": r.key, "emoji": r.emoji, "name": r.name,
+        "floor_based": r.floor_based, "aliases": r.aliases.split(), "staff_count": counts.get(r.id, 0),
+    } for r in await views.all_roles(ctx.session)]
+
+
+@op("roles.create")
+async def op_roles_create(ctx: Ctx, args: dict):
+    key = _str(args, "key", 32)
+    emoji = _str(args, "emoji", 16, optional=True) or "👤"
+    name = _str(args, "name", 64, optional=True) or ""
+    parts = [key, emoji] if not any(ch.isalnum() for ch in emoji) else [key]
+    role, text = await views.create_role(ctx.session, ctx.lang, parts + name.split())
+    if role is None:
+        raise ApiError(400, "invalid", _plain(text))
+    return {"id": role.id}
+
+
+@op("roles.update")
+async def op_roles_update(ctx: Ctx, args: dict):
+    role = await _get(ctx, Role, _int(args, "id"), "role_not_found")
+    if "emoji" in args:
+        role.emoji = _str(args, "emoji", 16) or "👤"
+    if "name" in args:
+        role.name = _str(args, "name", 64) or role.key.capitalize()
+    if "floor_based" in args:
+        role.floor_based = _bool(args, "floor_based")
+    if "aliases" in args:
+        words = args["aliases"]
+        if not isinstance(words, list) or not all(isinstance(w, str) for w in words):
+            raise ApiError(400, "bad_args", "aliases: list expected")
+        taken = {w for w, rid in (await trigger_cache.get(ctx.session)).items() if rid != role.id}
+        clean: list[str] = []
+        for word in (w.strip().lstrip("#/").lower() for w in words):
+            if not word or word == role.key or word in clean:
+                continue
+            if not is_valid_key(word):
+                raise ctx.error("bad_key", word=word)
+            if word in taken:
+                raise ctx.error("key_taken", word=word)
+            clean.append(word)
+        role.aliases = " ".join(clean)
+    await ctx.session.commit()
+    trigger_cache.invalidate()
+    return {"id": role.id}
+
+
+@op("roles.delete")
+async def op_roles_delete(ctx: Ctx, args: dict):
+    role = await _get(ctx, Role, _int(args, "id"), "role_not_found")
+    await views.delete_role(ctx.session, role)
+    return {}
+
+
+# ---------- Floors ----------
+
+@op("floors.list")
+async def op_floors_list(ctx: Ctx, args: dict):
+    s = ctx.session
+    groups = (await s.scalars(select(Group).where(Group.is_active))).all()
+    staff = dict((await s.execute(
+        select(StaffRole.floor_id, func.count(func.distinct(StaffRole.user_id))).group_by(StaffRole.floor_id)
+    )).all())
+    return [{
+        "id": f.id,
+        "name": f.name,
+        "classes": sorted(g.label for g in groups if g.floor_id == f.id),
+        "staff_count": staff.get(f.id, 0),
+    } for f in await views.all_floors(s)]
+
+
+@op("floors.create")
+async def op_floors_create(ctx: Ctx, args: dict):
+    floor, text = await views.create_floor(ctx.session, ctx.lang, _str(args, "name", 64))
+    if floor is None:
+        raise ApiError(400, "invalid", _plain(text))
+    return {"id": floor.id}
+
+
+@op("floors.rename")
+async def op_floors_rename(ctx: Ctx, args: dict):
+    floor = await _get(ctx, Floor, _int(args, "id"), "floor_not_found")
+    name = _str(args, "name", 64)
+    if not name:
+        raise ctx.error("usage_addfloor")
+    other = await find_floor(ctx.session, name)
+    if other is not None and other.id != floor.id:
+        raise ctx.error("floor_exists", name=name)
+    floor.name = name
+    await ctx.session.commit()
+    return {"id": floor.id}
+
+
+@op("floors.delete")
+async def op_floors_delete(ctx: Ctx, args: dict):
+    floor = await _get(ctx, Floor, _int(args, "id"), "floor_not_found")
+    await views.delete_floor(ctx.session, floor)
+    return {}
+
+
+# ---------- Groups ----------
+
+async def _groups(ctx: Ctx) -> list[dict]:
+    groups = (await ctx.session.scalars(select(Group).where(Group.is_active))).all()
+    return [_group_json(g) for g in sorted(groups, key=group_sort_key)]
+
+
+@op("groups.list")
+async def op_groups_list(ctx: Ctx, args: dict):
+    return await _groups(ctx)
+
+
+@op("groups.update")
+async def op_groups_update(ctx: Ctx, args: dict):
+    group = await _get(ctx, Group, _int(args, "chat_id"))
+    if "class_name" in args:
+        parsed = parse_class(_str(args, "class_name", 16) or "")
+        if parsed is None:
+            raise ctx.error("usage_setclass")
+        group.grade, group.class_name = parsed
+    if "floor_id" in args:
+        floor_id = _int(args, "floor_id", optional=True)
+        if floor_id is not None:
+            await _get(ctx, Floor, floor_id, "floor_not_found")
+        group.floor_id = floor_id
+    if "lang" in args:
+        lang = _str(args, "lang", 2)
+        if lang not in LANGS:
+            raise ctx.error("usage_grouplang")
+        group.lang = lang
+    await ctx.session.commit()
+    return _group_json(group)
+
+
+@op("groups.refresh")
+async def op_groups_refresh(ctx: Ctx, args: dict):
+    """Re-checks with Telegram whether the bot is still in each group and still an admin."""
+    for group in (await ctx.session.scalars(select(Group).where(Group.is_active))).all():
+        try:
+            member = await ctx.bot.get_chat_member(group.chat_id, ctx.bot.id)
+            chat = await ctx.bot.get_chat(group.chat_id)
+        except TelegramForbiddenError:
+            group.is_active = False
+            continue
+        except TelegramAPIError as e:
+            log.warning("Cannot refresh group %s: %s", group.chat_id, e)
+            continue
+        group.bot_is_admin = member.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR)
+        if member.status in (ChatMemberStatus.LEFT, ChatMemberStatus.KICKED):
+            group.is_active = False
+        if chat.title:
+            group.title = chat.title
+    await ctx.session.commit()
+    return await _groups(ctx)
+
+
+# ---------- Staff ----------
+
+async def _user_out(ctx: Ctx, user: User) -> dict:
+    roles = (await ctx.session.scalars(select(StaffRole).where(StaffRole.user_id == user.id))).all()
+    return _user_json(user, list(roles), ctx.user)
+
+
+@op("staff.list")
+async def op_staff_list(ctx: Ctx, args: dict):
+    users = (await ctx.session.scalars(select(User).order_by(User.full_name))).all()
+    by_user: dict[int, list[StaffRole]] = {}
+    for sr in (await ctx.session.scalars(select(StaffRole))).all():
+        by_user.setdefault(sr.user_id, []).append(sr)
+    return [_user_json(u, by_user.get(u.id, []), ctx.user) for u in users]
+
+
+@op("staff.set_perm")
+async def op_staff_set_perm(ctx: Ctx, args: dict):
+    target = await _get(ctx, User, _int(args, "user_id"), "user_not_found")
+    perm = _str(args, "perm", 16)
+    if perm not in views.PERMS:
+        raise ApiError(400, "bad_args", "perm")
+    value = _bool(args, "value")
+    if perm == "admin" and not value and (target.id == ctx.user.id or target.id in settings.admin_ids):
+        raise ctx.error("webapp_cannot_demote")
+    setattr(target, views.PERM_COLUMNS[perm].key, value)
+    await ctx.session.commit()
+    if perm == "admin":
+        await set_user_menu(ctx.bot, target)
+    return await _user_out(ctx, target)
+
+
+@op("staff.add_role")
+async def op_staff_add_role(ctx: Ctx, args: dict):
+    target = await _get(ctx, User, _int(args, "user_id"), "user_not_found")
+    role = await _get(ctx, Role, _int(args, "role_id"), "role_not_found")
+    floor_id = _int(args, "floor_id", optional=True)
+    if floor_id is not None:
+        await _get(ctx, Floor, floor_id, "floor_not_found")
+    await add_staff_role(ctx.session, target.id, role.id, floor_id)
+    await ctx.session.commit()
+    return await _user_out(ctx, target)
+
+
+@op("staff.remove_role")
+async def op_staff_remove_role(ctx: Ctx, args: dict):
+    target = await _get(ctx, User, _int(args, "user_id"), "user_not_found")
+    role_id = _int(args, "role_id")
+    floor_id = _int(args, "floor_id", optional=True)
+    await ctx.session.execute(delete(StaffRole).where(
+        StaffRole.user_id == target.id,
+        StaffRole.role_id == role_id,
+        StaffRole.floor_id.is_(None) if floor_id is None else StaffRole.floor_id == floor_id,
+    ))
+    await ctx.session.commit()
+    return await _user_out(ctx, target)
+
+
+# ---------- Invites ----------
+
+@op("invites.list")
+async def op_invites_list(ctx: Ctx, args: dict):
+    floors = {f.id: f.name for f in await views.all_floors(ctx.session)}
+    out = []
+    for inv, role in await views.active_invites(ctx.session):
+        out.append({
+            "code": inv.code,
+            "kind": inv.kind,
+            "label": role.title if role else _plain(t(ctx.lang, f"perm_{inv.kind}")),
+            "floor": floors.get(inv.floor_id),
+            "uses_left": inv.uses_left,
+            "link": await views.invite_link(ctx.bot, inv.code),
+        })
+    return out
+
+
+@op("invites.create")
+async def op_invites_create(ctx: Ctx, args: dict):
+    kind = _str(args, "kind", 16)
+    role = floor = None
+    if kind == "role":
+        role = await _get(ctx, Role, _int(args, "role_id"), "role_not_found")
+        floor_id = _int(args, "floor_id", optional=True)
+        floor = await _get(ctx, Floor, floor_id, "floor_not_found") if floor_id is not None else None
+    elif kind not in views.PERMS:
+        raise ApiError(400, "bad_args", "kind")
+    uses = _int(args, "uses")
+    if not 1 <= uses <= 1000:
+        raise ApiError(400, "bad_args", "uses: 1–1000")
+    inv = await views.new_invite(ctx.session, ctx.user.id, kind, role, floor, uses)
+    return {"code": inv.code, "link": await views.invite_link(ctx.bot, inv.code)}
+
+
+@op("invites.revoke")
+async def op_invites_revoke(ctx: Ctx, args: dict):
+    inv = await _get(ctx, Invite, _str(args, "code", 32), "inv_invalid")
+    inv.is_active = False
+    await ctx.session.commit()
+    return {}
+
+
+# ---------- Announcements ----------
+
+@op("announce.send")
+async def op_announce_send(ctx: Ctx, args: dict):
+    text = _str(args, "text", 4096)
+    if not text:
+        raise ctx.error("webapp_text_empty")
+    pin = _bool(args, "pin")
+    ids = args.get("chat_ids")
+    if not isinstance(ids, list) or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids):
+        raise ApiError(400, "bad_args", "chat_ids")
+    groups = {g.chat_id: g for g in (await ctx.session.scalars(select(Group).where(Group.is_active))).all()}
+    chat_ids = [cid for cid in dict.fromkeys(ids) if cid in groups]
+    if not chat_ids:
+        raise ctx.error("ann_nothing_selected")
+
+    result = await broadcast(
+        ctx.bot, ctx.session, chat_ids, pin,
+        # Plain text: whatever the admin typed is shown exactly as written.
+        send=lambda chat_id: ctx.bot.send_message(chat_id, text, parse_mode=None),
+    )
+    ann = await save_announcement(ctx.session, ctx.user.id, pin, text, result)
+
+    def labels(cids: list[int]) -> list[str]:
+        return [groups[c].label if c in groups else str(c) for c in cids]
+
+    return {
+        "id": ann.id,
+        "sent": len(result.sent),
+        "total": len(chat_ids),
+        "failed": labels(result.failed),
+        "pin_failed": labels(result.pin_failed),
+    }
+
+
+@op("announce.history")
+async def op_announce_history(ctx: Ctx, args: dict):
+    s = ctx.session
+    anns = (await s.scalars(select(Announcement).order_by(Announcement.created_at.desc()).limit(30))).all()
+    counts = dict((await s.execute(
+        select(AnnouncementMessage.announcement_id, func.count())
+        .where(AnnouncementMessage.announcement_id.in_([a.id for a in anns]))
+        .group_by(AnnouncementMessage.announcement_id)
+    )).all())
+    authors = {u.id: u for u in (await s.scalars(
+        select(User).where(User.id.in_({a.author_id for a in anns}))
+    )).all()}
+    return [{
+        "id": a.id,
+        "created_at": _iso(a.created_at),
+        "author": authors[a.author_id].full_name if a.author_id in authors else None,
+        "preview": a.preview,
+        "groups": counts.get(a.id, 0),
+        "pinned": a.pinned,
+        "deleted": a.deleted,
+    } for a in anns]
+
+
+@op("announce.delete")
+async def op_announce_delete(ctx: Ctx, args: dict):
+    ann = await _get(ctx, Announcement, _int(args, "id"))
+    if ann.deleted:
+        raise ctx.error("ann_already_deleted")
+    deleted, total = await delete_announcement(ctx.bot, ctx.session, ann)
+    return {"deleted": deleted, "total": total}
+
+
+# ---------- Calls & stats ----------
+
+@op("calls.list")
+async def op_calls_list(ctx: Ctx, args: dict):
+    stmt = select(Call).order_by(Call.created_at.desc()).limit(50)
+    if args.get("status") == "pending":
+        stmt = stmt.where(Call.status == "pending")
+    return await _calls_json(ctx.session, list((await ctx.session.scalars(stmt)).all()))
+
+
+@op("calls.close")
+async def op_calls_close(ctx: Ctx, args: dict):
+    call_id = _int(args, "id")
+    if not await set_status(ctx.session, call_id, expect="pending", status="closed"):
+        raise ctx.error("cannot_do")
+    call = await ctx.session.get(Call, call_id, populate_existing=True)
+    await refresh_call(ctx.bot, ctx.session, call)
+    return {}
+
+
+@op("stats")
+async def op_stats(ctx: Ctx, args: dict):
+    days = _int(args, "days", optional=True) or 7
+    return await views.stats_data(ctx.session, max(1, min(days, 365)))

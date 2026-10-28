@@ -139,10 +139,9 @@ def target_label(lang: str, kind: str, role: Role | None) -> str:
     return q(role.title) if role else t(lang, f"perm_{kind}")
 
 
-async def create_invite(
-    session: AsyncSession, bot: Bot, creator_id: int, lang: str,
-    kind: str, role: Role | None, floor: Floor | None, uses: int,
-) -> str:
+async def new_invite(
+    session: AsyncSession, creator_id: int, kind: str, role: Role | None, floor: Floor | None, uses: int,
+) -> Invite:
     inv = Invite(
         code=secrets.token_urlsafe(9),
         kind=kind,
@@ -153,8 +152,20 @@ async def create_invite(
     )
     session.add(inv)
     await session.commit()
+    return inv
+
+
+async def invite_link(bot: Bot, code: str) -> str:
     me = await bot.me()
-    link = f"https://t.me/{me.username}?start={inv.code}"
+    return f"https://t.me/{me.username}?start={code}"
+
+
+async def create_invite(
+    session: AsyncSession, bot: Bot, creator_id: int, lang: str,
+    kind: str, role: Role | None, floor: Floor | None, uses: int,
+) -> str:
+    inv = await new_invite(session, creator_id, kind, role, floor, uses)
+    link = await invite_link(bot, inv.code)
     what = target_label(lang, kind, role)
     if floor:
         what += f" ({q(floor.name)})"
@@ -243,32 +254,50 @@ async def groups_lines(session: AsyncSession, lang: str) -> list[str]:
     return lines
 
 
-async def stats_lines(session: AsyncSession, lang: str, days: int) -> list[str]:
+async def stats_data(session: AsyncSession, days: int) -> dict:
+    """Calls over the last `days`: totals per role (with average minutes to accept) and busiest classes."""
     since = utcnow() - timedelta(days=days)
     calls = (await session.scalars(select(Call).where(Call.created_at >= since))).all()
-    if not calls:
-        return [t(lang, "stats_empty", days=days)]
     roles = {r.id: r for r in await all_roles(session)}
     groups = {g.chat_id: g for g in (await session.scalars(select(Group))).all()}
 
     by_role: dict[int | None, list[Call]] = defaultdict(list)
     for c in calls:
         by_role[c.role_id].append(c)
-    lines = [t(lang, "stats_title", days=days, n=len(calls))]
+    per_role = []
     for role_id, items in by_role.items():
         accepted = [c for c in items if c.accepted_at]
         avg = (
             sum((c.accepted_at - c.created_at).total_seconds() for c in accepted) / len(accepted) / 60
             if accepted else 0
         )
-        title = roles[role_id].title if role_id in roles else "❔"
+        per_role.append({
+            "title": roles[role_id].title if role_id in roles else "❔",
+            "total": len(items),
+            "accepted": len(accepted),
+            "avg_minutes": round(avg, 1),
+            "escalated": sum(c.escalated for c in items),
+        })
+    per_role.sort(key=lambda r: -r["total"])
+    top = [
+        {"label": groups[chat_id].label if chat_id in groups else str(chat_id), "total": n}
+        for chat_id, n in Counter(c.chat_id for c in calls).most_common(5)
+    ]
+    return {"days": days, "total": len(calls), "per_role": per_role, "top_classes": top}
+
+
+async def stats_lines(session: AsyncSession, lang: str, days: int) -> list[str]:
+    data = await stats_data(session, days)
+    if not data["total"]:
+        return [t(lang, "stats_empty", days=days)]
+    lines = [t(lang, "stats_title", days=days, n=data["total"])]
+    for r in data["per_role"]:
         lines.append(t(
             lang, "stats_role",
-            title=q(title), n=len(items), accepted=len(accepted),
-            avg=f"{avg:.1f}", escalated=sum(c.escalated for c in items),
+            title=q(r["title"]), n=r["total"], accepted=r["accepted"],
+            avg=f"{r['avg_minutes']:.1f}", escalated=r["escalated"],
         ))
     lines.append(t(lang, "stats_top"))
-    for chat_id, n in Counter(c.chat_id for c in calls).most_common(5):
-        label = groups[chat_id].label if chat_id in groups else str(chat_id)
-        lines.append(f"• {q(label)}: {n}")
+    for row in data["top_classes"]:
+        lines.append(f"• {q(row['label'])}: {row['total']}")
     return lines

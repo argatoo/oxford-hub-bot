@@ -7,6 +7,7 @@ Sinf guruhlarini boshqarish uchun bot (Telegram'da: **Oxford Hub**, [@OIS_HubBot
 - **🏢 Qavatlar**: qavat bo'yicha ishlaydigan rollar (masalan, cleaner) faqat sinf joylashgan qavatdagi xodimga boradi.
 - **⚠️ Eskalatsiya**: chaqiruvni 5 daqiqa ichida hech kim qabul qilmasa (shoshilinch chaqiruvda 2 daqiqa), adminlarga xabar boradi.
 - **🌐 3 til**: o'zbekcha, ruscha va inglizcha. Har kim o'z tilini tanlaydi, guruh tili esa alohida sozlanadi.
+- **📱 Admin Mini App**: Telegram ichida ochiladigan to'liq boshqaruv paneli: e'lonlar, chaqiruvlar, xodimlar, guruhlar, rollar, qavatlar, havolalar va statistika (5-bo'lim).
 
 ---
 
@@ -147,7 +148,34 @@ Agar 3-qadam bajarilmasa, buyruq nima qilish kerakligini aytadi: Supabase'da `pg
 - "Faqat o'qituvchilar chaqira oladi" ogohlantirishi guruhdan taxminan 1 daqiqada o'chadi, chunki u Supabase Cron bilan birga ishlaydi.
 - **Narxlar:** Vercel'ning bepul Hobby tarifi faqat shaxsiy va notijorat loyihalar uchun. Xususiy maktab uchun Pro tarifi talab qilinishi mumkin. Supabase'ning bepul loyihasi uzoq vaqt ishlatilmasa, pauzaga tushadi.
 
-## 5. Testlar
+## 5. Admin Mini App
+
+Telegram ichida ochiladigan boshqaruv paneli. U faqat adminlarga ko'rinadi va faqat adminlar uchun ishlaydi: Telegram har bir ochilishni bot tokeni bilan imzolaydi, server esa shu imzoni tekshiradi.
+
+**Qanday ochiladi:** bot bilan chatda xabar yozish maydoni yonidagi **Panel** tugmasi orqali yoki `/admin` → **📱 Mini App panel** orqali.
+
+| Bo'lim | Nima qilsa bo'ladi |
+|---|---|
+| Asosiy | Raqamlar, ogohlantirishlar (masalan, "bot admin emas", "qavat yo'q"), kutilayotgan chaqiruvlar |
+| E'lon | Matn yozish, hamma/parallel/tanlangan guruhlarga yuborish, pin qilish, yuborilganlarni hammasidan o'chirish |
+| Chaqiruvlar | Kutilayotgan va barcha chaqiruvlar, osilib qolganini yopish |
+| Xodimlar | Qidirish, admin/e'lon beruvchi/o'qituvchi huquqlarini yoqib-o'chirish, rol va qavat berish yoki olish |
+| Guruhlar | Sinf, qavat va tilni o'zgartirish, Telegram'dan tekshirish (bot hali admin ekanmi) |
+| Rollar | Yaratish, emoji/nom/qo'shimcha teglarni o'zgartirish, qavat bo'yicha yo'naltirish, o'chirish |
+| Qavatlar | Qo'shish, nomini o'zgartirish, o'chirish |
+| Havolalar | Taklif havolasi yaratish (nusxa olish yoki ulashish), bekor qilish |
+| Statistika | 1/7/30/90 kunlik: rollar bo'yicha va eng ko'p chaqirgan sinflar |
+
+Rasm yoki fayl bilan e'lon yuborish uchun botdagi `/announce` buyrug'idan foydalaning. Mini App faqat matnli e'lon yuboradi.
+
+**Vercel'da** Mini App o'zi ishlaydi: sahifa `https://SIZNING-LOYIHA.vercel.app/admin/` manzilida bo'ladi. `setup_webhook` buyrug'i adminlarga **Panel** tugmasini qo'yadi. Vercel loyiha manzilini botga o'zi beradi. Boshqa manzil (masalan, o'z domeningiz) ishlatilsa, Vercel'da `WEBAPP_URL` o'zgaruvchisini qo'shing.
+
+**Kompyuterda sinash (ixtiyoriy).** Telegram Mini App'ni faqat HTTPS manzildan ochadi, shuning uchun kompyuterda tunnel kerak bo'ladi:
+1. `.venv\Scripts\python.exe -m bot.devserver` buyrug'ini ishga tushiring. Mini App `http://localhost:8080/admin/` manzilida ochiladi.
+2. Tunnel ishga tushiring, masalan [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/): `cloudflared tunnel --url http://localhost:8080`
+3. Chiqqan `https://….trycloudflare.com` manzilining oxiriga `/admin/` qo'shib, `.env` dagi `WEBAPP_URL=` ga yozing va botni qayta ishga tushiring.
+
+## 6. Testlar
 
 ```bash
 .venv\Scripts\python.exe -m pip install pytest pytest-asyncio
@@ -160,10 +188,13 @@ Agar 3-qadam bajarilmasa, buyruq nima qilish kerakligini aytadi: Supabase'da `pg
 
 ```
 api/index.py           Vercel kirish nuqtasi
+public/admin/          admin Mini App (bitta HTML sahifa)
 supabase/cron.sql      Supabase Cron (qo'lda sozlash uchun)
 bot/
   __main__.py          kompyuterda ishga tushirish (polling)
-  webhook.py           Vercel uchun: Telegram webhook va cron so'rovlari
+  webhook.py           Vercel uchun: Telegram webhook, Mini App API va cron so'rovlari
+  webapp_api.py        Mini App API (initData imzosini tekshiradi, faqat adminlar)
+  devserver.py         Mini App'ni kompyuterda sinash uchun server
   setup_webhook.py     Vercel + Supabase'ni bir marta ulash
   app.py               ikkala rejim uchun umumiy sozlash
   storage.py           suhbat holati (e'lon qoralamasi) bazada
@@ -172,7 +203,8 @@ bot/
   db/models.py         ma'lumotlar bazasi jadvallari
   handlers/
     start.py           /start, til, taklif havolalari, /me, /help
-    admin.py           rollar, qavatlar, xodimlar, /stats
+    admin.py           rollar, qavatlar, xodimlar, /stats (buyruqlar)
+    admin_panel.py     /admin tugmali panel
     groups.py          guruhga qo'shilish, /setclass, /setfloor
     calls.py           #teg orqali xodim chaqirish
     announce.py        e'lonlar

@@ -1,14 +1,20 @@
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError, TelegramMigrateToChat, TelegramRetryAfter
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.db.models import Announcement, AnnouncementMessage
 from bot.services.common import migrate_group
 
 log = logging.getLogger(__name__)
+
+# Sends the announcement to one chat and returns the sent message (anything with .message_id).
+Sender = Callable[[int], Awaitable]
 
 
 @dataclass
@@ -18,20 +24,14 @@ class BroadcastResult:
     pin_failed: list[int] = field(default_factory=list)
 
 
-async def broadcast(
-    bot: Bot,
-    session: AsyncSession,
-    from_chat_id: int,
-    message_id: int,
-    chat_ids: list[int],
-    pin: bool,
-) -> BroadcastResult:
+async def broadcast(bot: Bot, session: AsyncSession, chat_ids: list[int], pin: bool, send: Sender) -> BroadcastResult:
     result = BroadcastResult()
     for chat_id in chat_ids:
         target = chat_id
+        msg = None
         for _attempt in range(3):
             try:
-                msg = await bot.copy_message(target, from_chat_id, message_id)
+                msg = await send(target)
                 break
             except TelegramRetryAfter as e:
                 await asyncio.sleep(e.retry_after + 1)
@@ -40,10 +40,7 @@ async def broadcast(
                 target = e.migrate_to_chat_id
             except TelegramAPIError as e:
                 log.warning("Broadcast to %s failed: %s", target, e)
-                msg = None
                 break
-        else:
-            msg = None
 
         if msg is None:
             result.failed.append(chat_id)
@@ -57,3 +54,32 @@ async def broadcast(
         # Stay well under Telegram's ~30 messages/second limit.
         await asyncio.sleep(0.1)
     return result
+
+
+async def save_announcement(
+    session: AsyncSession, author_id: int, pin: bool, preview: str, result: BroadcastResult
+) -> Announcement:
+    ann = Announcement(author_id=author_id, pinned=pin, preview=preview[:200])
+    session.add(ann)
+    await session.flush()
+    for chat_id, message_id in result.sent:
+        session.add(AnnouncementMessage(announcement_id=ann.id, chat_id=chat_id, message_id=message_id))
+    await session.commit()
+    return ann
+
+
+async def delete_announcement(bot: Bot, session: AsyncSession, ann: Announcement) -> tuple[int, int]:
+    """Removes the announcement from every group. Returns (deleted, total)."""
+    msgs = (await session.scalars(
+        select(AnnouncementMessage).where(AnnouncementMessage.announcement_id == ann.id)
+    )).all()
+    deleted = 0
+    for m in msgs:
+        try:
+            await bot.delete_message(m.chat_id, m.message_id)
+            deleted += 1
+        except TelegramAPIError:
+            pass
+    ann.deleted = True
+    await session.commit()
+    return deleted, len(msgs)

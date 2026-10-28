@@ -31,6 +31,16 @@ class Settings:
     tz: timezone
     # Shared secret for Telegram's webhook and the Supabase cron call (Vercel mode).
     webhook_secret: str
+    # HTTPS address of the admin Mini App; empty = no Mini App buttons.
+    webapp_url: str
+
+
+def _webapp_url() -> str:
+    url = os.getenv("WEBAPP_URL", "").strip()
+    if not url and os.getenv("VERCEL_PROJECT_PRODUCTION_URL"):
+        # Set by Vercel itself, e.g. "oxford-hub-bot.vercel.app".
+        url = f"https://{os.getenv('VERCEL_PROJECT_PRODUCTION_URL')}/admin/"
+    return url if url.startswith("https://") else ""
 
 
 def load_settings() -> Settings:
@@ -51,6 +61,7 @@ def load_settings() -> Settings:
         urgent_escalate_minutes=int(os.getenv("URGENT_ESCALATE_MINUTES", "2")),
         tz=timezone(timedelta(hours=int(os.getenv("TZ_OFFSET_HOURS", "5")))),
         webhook_secret=os.getenv("WEBHOOK_SECRET", ""),
+        webapp_url=_webapp_url(),
     )
 
 

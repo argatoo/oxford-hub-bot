@@ -321,6 +321,30 @@ TEXTS: dict[str, dict[str, str]] = {
     },
     "stats_days": {"uz": "{n} kun", "ru": "{n} дн.", "en": "{n} days"},
 
+    # ---------- Mini App ----------
+    "btn_mini_app": {"uz": "📱 Mini App panel", "ru": "📱 Mini App панель", "en": "📱 Mini App panel"},
+    "menu_panel": {"uz": "Panel", "ru": "Панель", "en": "Panel"},
+    "webapp_forbidden": {
+        "uz": "Bu panel faqat adminlar uchun. Avval botga /start yozing.",
+        "ru": "Эта панель только для администраторов. Сначала напишите боту /start.",
+        "en": "This panel is for admins only. Send /start to the bot first.",
+    },
+    "webapp_cannot_demote": {
+        "uz": "O'zingizni yoki bosh adminni (ADMIN_IDS) adminlikdan olib bo'lmaydi.",
+        "ru": "Нельзя снять права админа с себя или с главного админа (ADMIN_IDS).",
+        "en": "You can't remove admin rights from yourself or a main admin (ADMIN_IDS).",
+    },
+    "webapp_not_found": {
+        "uz": "Topilmadi. Sahifani yangilang.",
+        "ru": "Не найдено. Обновите страницу.",
+        "en": "Not found. Please refresh.",
+    },
+    "webapp_text_empty": {
+        "uz": "E'lon matni bo'sh.",
+        "ru": "Текст объявления пуст.",
+        "en": "The announcement text is empty.",
+    },
+
     # ---------- Roles ----------
     "roles_empty": {
         "uz": "Hali rol yo'q. Qo'shish: <code>/addrole cleaner 🧹 Tozalovchi</code>",

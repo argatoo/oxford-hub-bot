@@ -78,7 +78,8 @@ async def main(base_url: str) -> None:
         )
         await set_commands(bot)
         async with async_sessionmaker(engine)() as session:
-            await sync_admin_menus(bot, session)
+            # Gives every admin the "Panel" button that opens the Mini App.
+            await sync_admin_menus(bot, session, webapp_url=f"{base_url}/admin/")
         info = await bot.get_webhook_info()
         me = await bot.me()
         print(f"   ✅ @{me.username} → {info.url}")

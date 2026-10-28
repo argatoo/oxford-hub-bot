@@ -7,11 +7,12 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.callbacks import AdmCb
+from bot.config import settings
 from bot.db.models import Floor, Invite, Role, User
 from bot.filters import IsAdmin
 from bot.handlers.announce import AnnounceSG, active_groups
@@ -62,13 +63,16 @@ async def _show(cb: CallbackQuery, text: str, markup: InlineKeyboardMarkup | Non
 
 def home_keyboard(lang: str) -> InlineKeyboardMarkup:
     kb = _builder()
+    if settings.webapp_url:
+        kb.row(InlineKeyboardButton(text=t(lang, "btn_mini_app"), web_app=WebAppInfo(url=settings.webapp_url)))
     for screen, key in (
         ("roles", "btn_roles"), ("floors", "btn_floors"),
         ("staff", "btn_staff"), ("groups", "btn_groups"),
         ("announce", "btn_announce"), ("stats", "btn_stats"),
     ):
         kb.button(text=t(lang, key), callback_data=AdmCb(s=screen))
-    kb.adjust(2)
+    # The Mini App button (if any) gets a row of its own; sections go two per row.
+    kb.adjust(*((1, 2) if settings.webapp_url else (2,)))
     return kb.as_markup()
 
 

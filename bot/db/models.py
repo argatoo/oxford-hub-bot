@@ -132,6 +132,8 @@ class Announcement(Base):
     pinned: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     deleted: Mapped[bool] = mapped_column(default=False)
+    # First characters of the text, for the history list in the admin Mini App.
+    preview: Mapped[str | None] = mapped_column(String(200))
 
 
 class FsmState(Base):

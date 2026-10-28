@@ -12,10 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.callbacks import AnnCb, AnnDelCb
-from bot.db.models import Announcement, AnnouncementMessage, Group, User
+from bot.db.models import Announcement, Group, User
 from bot.filters import CanAnnounce, can_announce, is_admin
 from bot.i18n import t
-from bot.services.broadcast import broadcast
+from bot.services.broadcast import broadcast, delete_announcement, save_announcement
 from bot.services.common import group_sort_key, q
 
 router = Router(name="announce")
@@ -83,7 +83,10 @@ async def on_content(message: Message, state: FSMContext, session: AsyncSession,
             await message.answer(t(lang, "ann_no_albums"))
         return
     groups = await active_groups(session)
-    await state.update_data(src_chat=message.chat.id, src_msg=message.message_id, selected=[], pin=False)
+    preview = message.text or message.caption or "📎"
+    await state.update_data(
+        src_chat=message.chat.id, src_msg=message.message_id, preview=preview[:200], selected=[], pin=False,
+    )
     await state.set_state(AnnounceSG.targets)
     await message.answer(
         t(lang, "ann_choose", n=0),
@@ -150,14 +153,11 @@ async def on_stale_targets(cb: CallbackQuery, lang: str):
 
 async def _do_send(status_msg: Message, session: AsyncSession, bot: Bot, user: User, lang: str,
                    data: dict, chat_ids: list[int], pin: bool) -> None:
-    result = await broadcast(bot, session, data["src_chat"], data["src_msg"], chat_ids, pin)
-
-    ann = Announcement(author_id=user.id, pinned=pin)
-    session.add(ann)
-    await session.flush()
-    for chat_id, message_id in result.sent:
-        session.add(AnnouncementMessage(announcement_id=ann.id, chat_id=chat_id, message_id=message_id))
-    await session.commit()
+    result = await broadcast(
+        bot, session, chat_ids, pin,
+        send=lambda chat_id: bot.copy_message(chat_id, data["src_chat"], data["src_msg"]),
+    )
+    ann = await save_announcement(session, user.id, pin, data.get("preview", ""), result)
 
     labels = {g.chat_id: g.label for g in await active_groups(session)}
     lines = [t(lang, "ann_report", sent=len(result.sent), total=len(chat_ids))]
@@ -186,16 +186,5 @@ async def on_delete_announcement(
         await cb.answer(t(lang, "ann_already_deleted"), show_alert=True)
         return
     await cb.answer()
-    msgs = (await session.scalars(
-        select(AnnouncementMessage).where(AnnouncementMessage.announcement_id == ann.id)
-    )).all()
-    deleted = 0
-    for m in msgs:
-        try:
-            await bot.delete_message(m.chat_id, m.message_id)
-            deleted += 1
-        except TelegramAPIError:
-            pass
-    ann.deleted = True
-    await session.commit()
-    await cb.message.edit_text(t(lang, "ann_deleted", n=deleted, total=len(msgs)))
+    deleted, total = await delete_announcement(bot, session, ann)
+    await cb.message.edit_text(t(lang, "ann_deleted", n=deleted, total=total))

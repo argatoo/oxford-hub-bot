@@ -1,0 +1,942 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Oxford Hub — Admin</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  /* Telegram sets --tg-theme-* on <html>; the fallbacks are for opening the page in a normal browser. */
+  :root {
+    --fb-bg: #ffffff; --fb-bg2: #f1f2f6; --fb-text: #111418; --fb-hint: #8a9099; --fb-link: #2481cc;
+    --fb-btn: #2481cc; --fb-btn-text: #ffffff; --fb-danger: #e53935; --fb-sep: rgba(0,0,0,.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fb-bg: #1c1d21; --fb-bg2: #111214; --fb-text: #f2f3f5; --fb-hint: #8d939c; --fb-link: #5eaef2;
+      --fb-btn: #3a8fd9; --fb-btn-text: #ffffff; --fb-danger: #ff6b66; --fb-sep: rgba(255,255,255,.08);
+    }
+  }
+  :root {
+    --bg: var(--tg-theme-bg-color, var(--fb-bg));
+    --bg2: var(--tg-theme-secondary-bg-color, var(--fb-bg2));
+    --section: var(--tg-theme-section-bg-color, var(--bg));
+    --text: var(--tg-theme-text-color, var(--fb-text));
+    --hint: var(--tg-theme-hint-color, var(--fb-hint));
+    --link: var(--tg-theme-link-color, var(--fb-link));
+    --accent: var(--tg-theme-accent-text-color, var(--link));
+    --btn: var(--tg-theme-button-color, var(--fb-btn));
+    --btn-text: var(--tg-theme-button-text-color, var(--fb-btn-text));
+    --danger: var(--tg-theme-destructive-text-color, var(--fb-danger));
+    --header: var(--tg-theme-section-header-text-color, var(--hint));
+    --sep: var(--tg-theme-section-separator-color, var(--fb-sep));
+    --ok: #2e9e5b; --warn: #e0912b;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg2); color: var(--text); }
+  body {
+    font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    overflow-x: hidden;
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  .wrap { max-width: 680px; margin: 0 auto; padding: 0 12px; }
+
+  header.top { padding: 14px 4px 6px; display: flex; align-items: baseline; gap: 8px; }
+  header.top h1 { font-size: 20px; margin: 0; letter-spacing: -.2px; }
+  header.top .who { color: var(--hint); font-size: 13px; margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50%; }
+
+  nav.tabs {
+    position: sticky; top: 0; z-index: 5; background: var(--bg2);
+    display: flex; gap: 6px; overflow-x: auto; padding: 8px 0 10px; scrollbar-width: none;
+  }
+  nav.tabs::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: none; border: 0; border-radius: 999px; padding: 7px 13px; background: var(--section);
+    color: var(--text); font-size: 14px; cursor: pointer; white-space: nowrap;
+  }
+  .chip.on { background: var(--btn); color: var(--btn-text); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips .chip { padding: 6px 11px; font-size: 13.5px; }
+
+  .h { color: var(--header); font-size: 12.5px; text-transform: uppercase; letter-spacing: .4px; margin: 18px 6px 6px; }
+  .card { background: var(--section); border-radius: var(--radius); overflow: hidden; }
+  .card.pad { padding: 14px; }
+  .row {
+    display: flex; align-items: center; gap: 10px; padding: 11px 14px; min-height: 48px;
+    border-top: 1px solid var(--sep); background: none; border-left: 0; border-right: 0; border-bottom: 0;
+    width: 100%; text-align: left; cursor: default;
+  }
+  .row:first-child { border-top: 0; }
+  button.row { cursor: pointer; }
+  button.row:active { background: var(--bg2); }
+  .row .main { flex: 1; min-width: 0; }
+  .row .title { font-weight: 500; overflow-wrap: anywhere; }
+  .row .sub { color: var(--hint); font-size: 13px; margin-top: 1px; overflow-wrap: anywhere; }
+  .row .side { color: var(--hint); font-size: 14px; flex: none; text-align: right; }
+  .chev::after { content: "›"; color: var(--hint); font-size: 22px; line-height: 1; margin-left: 4px; }
+  .empty { padding: 18px 14px; color: var(--hint); text-align: center; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .stat { background: var(--section); border-radius: var(--radius); padding: 12px; }
+  .stat b { display: block; font-size: 22px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--hint); font-size: 12.5px; }
+  @media (max-width: 360px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+
+  .badge {
+    display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 7px; border-radius: 999px;
+    background: var(--bg2); color: var(--hint); margin: 2px 4px 0 0; vertical-align: middle;
+  }
+  .badge.ok { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
+  .badge.warn { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+  .badge.bad { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
+  .badge.acc { background: color-mix(in srgb, var(--btn) 15%, transparent); color: var(--accent); }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border: 0; border-radius: 12px; padding: 11px 16px; background: var(--btn); color: var(--btn-text);
+    font-weight: 600; cursor: pointer; min-height: 44px;
+  }
+  .btn.block { width: 100%; }
+  .btn.ghost { background: var(--bg2); color: var(--accent); }
+  .btn.danger { background: none; color: var(--danger); }
+  .btn.small { min-height: 34px; padding: 6px 12px; font-size: 13.5px; border-radius: 10px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btns > .btn { flex: 1; }
+
+  label.f { display: block; margin: 12px 0 0; }
+  label.f > span { display: block; font-size: 13px; color: var(--hint); margin: 0 0 5px 2px; }
+  .in {
+    width: 100%; border: 1px solid var(--sep); background: var(--bg); border-radius: 11px;
+    padding: 10px 12px; outline: none; min-height: 44px;
+  }
+  .in:focus { border-color: var(--btn); }
+  textarea.in { min-height: 120px; resize: vertical; }
+  .hint { color: var(--hint); font-size: 12.5px; margin: 5px 2px 0; }
+  .count { text-align: right; }
+
+  .switch { position: relative; width: 46px; height: 28px; flex: none; }
+  .switch input { opacity: 0; position: absolute; inset: 0; margin: 0; cursor: pointer; }
+  .switch i { position: absolute; inset: 0; border-radius: 999px; background: var(--sep); transition: background .15s; pointer-events: none; }
+  .switch i::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .15s;
+  }
+  .switch input:checked + i { background: var(--btn); }
+  .switch input:checked + i::after { transform: translateX(18px); }
+
+  .bar { height: 8px; border-radius: 4px; background: var(--btn); min-width: 4px; }
+  .barrow { display: grid; grid-template-columns: 70px 1fr 32px; gap: 10px; align-items: center; padding: 8px 14px; }
+  table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.t th, table.t td { padding: 9px 10px; text-align: right; border-top: 1px solid var(--sep); font-variant-numeric: tabular-nums; }
+  table.t th { color: var(--hint); font-weight: 500; font-size: 12.5px; border-top: 0; }
+  table.t td:first-child, table.t th:first-child { text-align: left; }
+
+  .linkbox { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; word-break: break-all; padding: 10px 12px; background: var(--bg2); border-radius: 10px; margin: 8px 0; }
+
+  .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 20; display: none; }
+  .sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; background: var(--bg);
+    border-radius: 18px 18px 0 0; max-height: 88vh; overflow-y: auto; display: none;
+    padding: 8px 16px calc(20px + env(safe-area-inset-bottom));
+    max-width: 680px; margin: 0 auto;
+  }
+  .sheet.open, .sheet-bg.open { display: block; }
+  .sheet .grip { width: 38px; height: 5px; border-radius: 3px; background: var(--sep); margin: 4px auto 10px; }
+  .sheet h2 { font-size: 18px; margin: 0 0 4px; }
+  .sheet .x { position: absolute; right: 10px; top: 10px; border: 0; background: var(--bg2); width: 30px; height: 30px; border-radius: 50%; cursor: pointer; color: var(--hint); }
+
+  .toast {
+    position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(20px);
+    background: rgba(30,32,36,.92); color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 14px;
+    opacity: 0; transition: opacity .2s, transform .2s; z-index: 30; max-width: 90vw; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .center { min-height: 60vh; display: flex; align-items: center; justify-content: center; text-align: center; color: var(--hint); padding: 24px; }
+  .spinner { width: 26px; height: 26px; border: 3px solid var(--sep); border-top-color: var(--btn); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .warnrow .title { color: var(--warn); }
+  .mt { margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top"><h1>Oxford Hub</h1><span class="who" id="who"></span></header>
+  <nav class="tabs" id="tabs"></nav>
+  <main id="main"><div class="center"><div class="spinner"></div></div></main>
+</div>
+<div class="sheet-bg" id="sheetBg"></div>
+<div class="sheet" id="sheet"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------- texts
+const T = {
+  uz: {
+    open_in_tg: "Bu panelni Telegram ichida, Oxford Hub botidagi “Panel” tugmasi orqali oching.",
+    error: "Xatolik yuz berdi. Qayta urinib ko'ring.",
+    tab_home: "Asosiy", tab_announce: "E'lon", tab_calls: "Chaqiruvlar", tab_staff: "Xodimlar", tab_groups: "Guruhlar",
+    tab_roles: "Rollar", tab_floors: "Qavatlar", tab_invites: "Havolalar", tab_stats: "Statistika",
+    st_groups: "Guruhlar", st_teachers: "O'qituvchilar", st_staff: "Xodimlar", st_day: "Bugun chaqiruv", st_week: "7 kunda", st_roles: "Rollar",
+    attention: "Diqqat", w_not_admin: "{n} ta guruhda bot admin emas", w_no_floor: "{n} ta guruhga qavat belgilanmagan",
+    w_no_class: "{n} ta guruhda sinf belgilanmagan", w_no_roles: "Hali birorta rol yo'q", w_no_groups: "Hali birorta guruh ulanmagan",
+    all_good: "Hammasi joyida ✅", quick: "Tezkor amallar", q_announce: "📢 E'lon yuborish", q_invite: "🔗 Taklif havolasi",
+    pending_calls: "Kutilayotgan chaqiruvlar", recent_calls: "Oxirgi chaqiruvlar", no_calls: "Chaqiruvlar yo'q",
+    s_pending: "Kutilmoqda", s_accepted: "Qabul qilindi", s_done: "Bajarildi", s_closed: "Yopildi",
+    urgent: "Shoshilinch", escalated: "Kechikdi", from: "Kimdan", taker: "Kim oldi",
+    close_call: "Yopish", confirm_close: "Bu chaqiruv yopilsinmi?", closed_ok: "Chaqiruv yopildi",
+    f_pending: "Kutilayotgan", f_all: "Hammasi",
+    ann_text: "E'lon matni", ann_ph: "Masalan: Ertaga darslar 9:00 da boshlanadi", ann_to: "Qayerga", ann_all: "Hammasi",
+    ann_grade: "{g}-sinflar", ann_selected: "Tanlangan: {n} ta guruh", ann_pin: "Guruhda pin qilish",
+    ann_send: "Yuborish", ann_confirm: "E'lon {n} ta guruhga yuborilsinmi?", ann_sent: "Yuborildi: {sent}/{total}",
+    ann_failed: "Yuborilmadi: {list}", ann_pin_failed: "Pin qilinmadi: {list}", ann_history: "Yuborilgan e'lonlar",
+    ann_none: "Hali e'lon yuborilmagan", ann_delete: "Hammasidan o'chirish", ann_delete_confirm: "Bu e'lon barcha guruhlardan o'chirilsinmi?",
+    ann_deleted: "O'chirildi: {n}/{total}", ann_deleted_badge: "o'chirilgan", ann_groups: "{n} guruh", ann_pinned: "pin",
+    ann_need_text: "E'lon matnini yozing", ann_need_groups: "Kamida bitta guruhni tanlang",
+    ann_media_hint: "Rasm, video yoki fayl bilan e'lon uchun botda /announce buyrug'idan foydalaning.",
+    search: "Ism yoki @username…", perm_admin: "Admin", perm_announcer: "E'lon beruvchi", perm_teacher: "O'qituvchi",
+    no_users: "Hech kim topilmadi", rights: "Huquqlar", user_roles: "Xodim rollari", add_role: "Rol qo'shish",
+    role: "Rol", floor: "Qavat", all_floors: "Barcha qavatlar", add: "Qo'shish", main_admin: "Bosh admin", you: "Siz",
+    saved: "Saqlandi", staff_hint: "Ro'yxatda botga /start yozgan odamlar ko'rinadi. Yangi xodim uchun taklif havolasini yuboring.",
+    no_roles_yet: "Avval «Rollar» bo'limida rol yarating.",
+    refresh: "Telegram'dan tekshirish", refreshed: "Yangilandi", class: "Sinf", lang: "Guruh tili", no_floor: "Qavat yo'q",
+    bot_not_admin: "Bot admin emas", no_class: "Sinf yo'q", save: "Saqlash", no_groups: "Guruhlar yo'q",
+    groups_hint: "Botni sinf guruhiga qo'shib admin qiling — guruh shu yerda paydo bo'ladi.",
+    new_role: "Yangi rol", key: "Kalit (teg)", key_hint: "Guruhda #kalit deb yoziladi: lotin harflari, raqam va _",
+    emoji: "Emoji", name: "Nomi", aliases: "Qo'shimcha teglar", aliases_hint: "Bo'sh joy bilan ajrating, masalan: clean tozalash",
+    floor_based: "Qavat bo'yicha yo'naltirish", floor_based_hint: "Chaqiruv sinf joylashgan qavatdagi xodimga boradi",
+    delete: "O'chirish", del_role_confirm: "«{name}» rolini o'chirasizmi? Xodimlar bu roldan chiqariladi.",
+    create: "Yaratish", no_roles: "Hali rol yo'q", staff_n: "{n} xodim", invite_for_role: "🔗 Shu rol uchun havola",
+    new_floor: "Yangi qavat", floor_ph: "2-qavat", no_floors: "Hali qavat yo'q", rename: "Nom",
+    del_floor_confirm: "«{name}» qavatini o'chirasizmi? Sinflar va xodimlar undan ajratiladi.", classes: "Sinflar",
+    inv_new: "Yangi havola", inv_for: "Kim uchun", inv_uses: "Necha kishi foydalana oladi", inv_floor: "Qavat",
+    inv_floor_any: "Xodim o'zi tanlaydi", inv_create: "Havola yaratish", inv_ready: "Havola tayyor — kerakli odamga yuboring:",
+    copy: "Nusxa olish", copied: "Nusxa olindi", share: "Ulashish", inv_active: "Faol havolalar", inv_none: "Faol havolalar yo'q",
+    uses_left: "yana {n} marta", revoke: "Bekor qilish", revoke_confirm: "Bu havola bekor qilinsinmi?", revoked: "Bekor qilindi",
+    days: "{n} kun", total: "Jami chaqiruvlar", by_role: "Rollar bo'yicha", c_total: "Jami", c_acc: "Qabul",
+    c_avg: "O'rt. daq", c_esc: "Kechikkan", top_classes: "Eng ko'p chaqirgan sinflar", no_stats: "Bu davrda chaqiruvlar bo'lmagan",
+  },
+  ru: {
+    open_in_tg: "Откройте эту панель внутри Telegram — кнопкой «Панель» в боте Oxford Hub.",
+    error: "Произошла ошибка. Попробуйте ещё раз.",
+    tab_home: "Главная", tab_announce: "Объявление", tab_calls: "Вызовы", tab_staff: "Сотрудники", tab_groups: "Группы",
+    tab_roles: "Роли", tab_floors: "Этажи", tab_invites: "Ссылки", tab_stats: "Статистика",
+    st_groups: "Группы", st_teachers: "Учителя", st_staff: "Сотрудники", st_day: "Вызовов сегодня", st_week: "За 7 дней", st_roles: "Роли",
+    attention: "Внимание", w_not_admin: "Бот не админ в {n} группах", w_no_floor: "У {n} групп не указан этаж",
+    w_no_class: "У {n} групп не указан класс", w_no_roles: "Ещё нет ни одной роли", w_no_groups: "Ещё не подключено ни одной группы",
+    all_good: "Всё в порядке ✅", quick: "Быстрые действия", q_announce: "📢 Отправить объявление", q_invite: "🔗 Ссылка-приглашение",
+    pending_calls: "Ожидающие вызовы", recent_calls: "Последние вызовы", no_calls: "Вызовов нет",
+    s_pending: "Ожидает", s_accepted: "Принят", s_done: "Выполнен", s_closed: "Закрыт",
+    urgent: "Срочно", escalated: "Просрочен", from: "От кого", taker: "Принял(а)",
+    close_call: "Закрыть", confirm_close: "Закрыть этот вызов?", closed_ok: "Вызов закрыт",
+    f_pending: "Ожидающие", f_all: "Все",
+    ann_text: "Текст объявления", ann_ph: "Например: Завтра уроки начинаются в 9:00", ann_to: "Куда", ann_all: "Все",
+    ann_grade: "{g}-е классы", ann_selected: "Выбрано групп: {n}", ann_pin: "Закрепить в группе",
+    ann_send: "Отправить", ann_confirm: "Отправить объявление в {n} групп?", ann_sent: "Отправлено: {sent}/{total}",
+    ann_failed: "Не отправлено: {list}", ann_pin_failed: "Не закреплено: {list}", ann_history: "Отправленные объявления",
+    ann_none: "Объявлений ещё не было", ann_delete: "Удалить везде", ann_delete_confirm: "Удалить это объявление из всех групп?",
+    ann_deleted: "Удалено: {n}/{total}", ann_deleted_badge: "удалено", ann_groups: "групп: {n}", ann_pinned: "закреплено",
+    ann_need_text: "Напишите текст объявления", ann_need_groups: "Выберите хотя бы одну группу",
+    ann_media_hint: "Для объявления с фото, видео или файлом используйте команду /announce в боте.",
+    search: "Имя или @username…", perm_admin: "Админ", perm_announcer: "Публикует объявления", perm_teacher: "Учитель",
+    no_users: "Никого не найдено", rights: "Права", user_roles: "Роли сотрудника", add_role: "Добавить роль",
+    role: "Роль", floor: "Этаж", all_floors: "Все этажи", add: "Добавить", main_admin: "Главный админ", you: "Вы",
+    saved: "Сохранено", staff_hint: "В списке — те, кто написал боту /start. Новому сотруднику отправьте ссылку-приглашение.",
+    no_roles_yet: "Сначала создайте роль в разделе «Роли».",
+    refresh: "Проверить в Telegram", refreshed: "Обновлено", class: "Класс", lang: "Язык группы", no_floor: "Без этажа",
+    bot_not_admin: "Бот не админ", no_class: "Класс не указан", save: "Сохранить", no_groups: "Групп нет",
+    groups_hint: "Добавьте бота в группу класса и сделайте админом — группа появится здесь.",
+    new_role: "Новая роль", key: "Ключ (тег)", key_hint: "В группе пишут #ключ: латиница, цифры и _",
+    emoji: "Эмодзи", name: "Название", aliases: "Дополнительные теги", aliases_hint: "Через пробел, например: clean уборка",
+    floor_based: "Направлять по этажам", floor_based_hint: "Вызов идёт сотруднику этажа, где находится класс",
+    delete: "Удалить", del_role_confirm: "Удалить роль «{name}»? Сотрудники будут сняты с неё.",
+    create: "Создать", no_roles: "Ролей пока нет", staff_n: "сотрудников: {n}", invite_for_role: "🔗 Ссылка для этой роли",
+    new_floor: "Новый этаж", floor_ph: "2-этаж", no_floors: "Этажей пока нет", rename: "Название",
+    del_floor_confirm: "Удалить этаж «{name}»? Классы и сотрудники будут отвязаны.", classes: "Классы",
+    inv_new: "Новая ссылка", inv_for: "Для кого", inv_uses: "Сколько человек может воспользоваться", inv_floor: "Этаж",
+    inv_floor_any: "Сотрудник выберет сам", inv_create: "Создать ссылку", inv_ready: "Ссылка готова — отправьте её нужному человеку:",
+    copy: "Копировать", copied: "Скопировано", share: "Поделиться", inv_active: "Активные ссылки", inv_none: "Активных ссылок нет",
+    uses_left: "осталось {n}", revoke: "Отменить", revoke_confirm: "Отменить эту ссылку?", revoked: "Отменено",
+    days: "{n} дн.", total: "Всего вызовов", by_role: "По ролям", c_total: "Всего", c_acc: "Принято",
+    c_avg: "Ср. мин", c_esc: "Просроч.", top_classes: "Больше всего вызовов", no_stats: "За этот период вызовов не было",
+  },
+  en: {
+    open_in_tg: "Open this panel inside Telegram, with the “Panel” button in the Oxford Hub bot.",
+    error: "Something went wrong. Please try again.",
+    tab_home: "Home", tab_announce: "Announce", tab_calls: "Calls", tab_staff: "Staff", tab_groups: "Groups",
+    tab_roles: "Roles", tab_floors: "Floors", tab_invites: "Invites", tab_stats: "Stats",
+    st_groups: "Groups", st_teachers: "Teachers", st_staff: "Staff", st_day: "Calls today", st_week: "Last 7 days", st_roles: "Roles",
+    attention: "Attention", w_not_admin: "Bot isn't admin in {n} groups", w_no_floor: "{n} groups have no floor",
+    w_no_class: "{n} groups have no class set", w_no_roles: "No roles yet", w_no_groups: "No groups connected yet",
+    all_good: "All good ✅", quick: "Quick actions", q_announce: "📢 Send announcement", q_invite: "🔗 Invite link",
+    pending_calls: "Waiting calls", recent_calls: "Recent calls", no_calls: "No calls",
+    s_pending: "Waiting", s_accepted: "Taken", s_done: "Done", s_closed: "Closed",
+    urgent: "Urgent", escalated: "Overdue", from: "From", taker: "Taken by",
+    close_call: "Close", confirm_close: "Close this call?", closed_ok: "Call closed",
+    f_pending: "Waiting", f_all: "All",
+    ann_text: "Announcement text", ann_ph: "e.g. Tomorrow lessons start at 9:00", ann_to: "Send to", ann_all: "All",
+    ann_grade: "Grade {g}", ann_selected: "Selected: {n} groups", ann_pin: "Pin in the group",
+    ann_send: "Send", ann_confirm: "Send the announcement to {n} groups?", ann_sent: "Sent: {sent}/{total}",
+    ann_failed: "Failed: {list}", ann_pin_failed: "Not pinned: {list}", ann_history: "Sent announcements",
+    ann_none: "No announcements yet", ann_delete: "Delete everywhere", ann_delete_confirm: "Delete this announcement from all groups?",
+    ann_deleted: "Deleted: {n}/{total}", ann_deleted_badge: "deleted", ann_groups: "{n} groups", ann_pinned: "pinned",
+    ann_need_text: "Write the announcement text", ann_need_groups: "Select at least one group",
+    ann_media_hint: "For an announcement with a photo, video or file, use /announce in the bot.",
+    search: "Name or @username…", perm_admin: "Admin", perm_announcer: "Announcer", perm_teacher: "Teacher",
+    no_users: "Nobody found", rights: "Rights", user_roles: "Staff roles", add_role: "Add role",
+    role: "Role", floor: "Floor", all_floors: "All floors", add: "Add", main_admin: "Main admin", you: "You",
+    saved: "Saved", staff_hint: "The list shows people who sent /start to the bot. Send new staff an invite link.",
+    no_roles_yet: "Create a role in “Roles” first.",
+    refresh: "Check with Telegram", refreshed: "Updated", class: "Class", lang: "Group language", no_floor: "No floor",
+    bot_not_admin: "Bot not admin", no_class: "No class", save: "Save", no_groups: "No groups",
+    groups_hint: "Add the bot to a class group and make it admin — the group will show up here.",
+    new_role: "New role", key: "Key (tag)", key_hint: "Written in groups as #key: Latin letters, digits and _",
+    emoji: "Emoji", name: "Name", aliases: "Extra tags", aliases_hint: "Separate with spaces, e.g.: clean cleaning",
+    floor_based: "Route by floor", floor_based_hint: "Calls go to staff on the class's floor",
+    delete: "Delete", del_role_confirm: "Delete the role “{name}”? Staff will lose it.",
+    create: "Create", no_roles: "No roles yet", staff_n: "{n} staff", invite_for_role: "🔗 Invite link for this role",
+    new_floor: "New floor", floor_ph: "Floor 2", no_floors: "No floors yet", rename: "Name",
+    del_floor_confirm: "Delete the floor “{name}”? Classes and staff will be detached.", classes: "Classes",
+    inv_new: "New invite", inv_for: "For", inv_uses: "How many people can use it", inv_floor: "Floor",
+    inv_floor_any: "Staff member picks", inv_create: "Create link", inv_ready: "Link ready — send it to the right person:",
+    copy: "Copy", copied: "Copied", share: "Share", inv_active: "Active links", inv_none: "No active links",
+    uses_left: "{n} uses left", revoke: "Revoke", revoke_confirm: "Revoke this link?", revoked: "Revoked",
+    days: "{n} days", total: "Total calls", by_role: "By role", c_total: "Total", c_acc: "Taken",
+    c_avg: "Avg min", c_esc: "Overdue", top_classes: "Classes with most calls", no_stats: "No calls in this period",
+  },
+};
+const LOCALES = { uz: "uz-UZ", ru: "ru-RU", en: "en-GB" };
+let L = "uz";
+const t = (k, vars = {}) => (T[L][k] ?? T.uz[k] ?? k).replace(/\{(\w+)\}/g, (_, v) => vars[v] ?? "");
+
+// ---------------------------------------------------------------- Telegram & helpers
+const tg = window.Telegram && window.Telegram.WebApp;
+const initData = (tg && tg.initData) || "";
+const canTg = (v) => tg && tg.isVersionAtLeast && tg.isVersionAtLeast(v);
+
+function el(tag, props, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") n.className = v;
+    else if (k === "value") n.value = v;  // property, so it also works for <textarea>
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else if (k in n && typeof v !== "string") n[k] = v;
+    else n.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of kids.flat(Infinity)) {
+    if (c == null || c === false) continue;
+    n.append(c instanceof Node ? c : String(c));
+  }
+  return n;
+}
+const $ = (id) => document.getElementById(id);
+
+class ApiError extends Error {
+  constructor(message, code) { super(message); this.code = code; }
+}
+async function api(op, args = {}) {
+  let res, body;
+  try {
+    res = await fetch("/api", {
+      method: "POST",
+      headers: { "Authorization": "tma " + initData, "Content-Type": "application/json" },
+      body: JSON.stringify({ op, args }),
+    });
+    body = await res.json();
+  } catch (e) {
+    throw new ApiError(t("error"), "network");
+  }
+  if (!body.ok) throw new ApiError(body.message || t("error"), body.error);
+  return body.data;
+}
+
+function haptic(kind) {
+  if (!canTg("6.1")) return;
+  if (kind === "ok" || kind === "error" || kind === "warning") tg.HapticFeedback.notificationOccurred(kind === "ok" ? "success" : kind);
+  else tg.HapticFeedback.selectionChanged();
+}
+let toastTimer;
+function toast(msg) {
+  const box = $("toast");
+  box.textContent = msg;
+  box.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => box.classList.remove("show"), 2200);
+}
+function alertMsg(msg) {
+  return new Promise((ok) => (canTg("6.2") ? tg.showAlert(msg, ok) : (alert(msg), ok())));
+}
+function confirmMsg(msg) {
+  return new Promise((ok) => (canTg("6.2") ? tg.showConfirm(msg, ok) : ok(confirm(msg))));
+}
+/** Runs an action; on failure shows the server's (already translated) message. */
+async function act(button, fn) {
+  if (button) button.disabled = true;
+  try { await fn(); }
+  catch (e) { haptic("error"); await alertMsg(e.message || t("error")); }
+  finally { if (button) button.disabled = false; }
+}
+function fmtTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  try {
+    return new Intl.DateTimeFormat(LOCALES[L], { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(d);
+  } catch { return d.toLocaleString(); }
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch {
+    const ta = el("textarea", { style: "position:fixed;opacity:0" }, text);
+    document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove();
+  }
+  haptic("ok"); toast(t("copied"));
+}
+function share(link) {
+  const url = "https://t.me/share/url?url=" + encodeURIComponent(link);
+  if (tg && tg.openTelegramLink) tg.openTelegramLink(url); else window.open(url, "_blank");
+}
+
+// UI pieces
+const section = (title, ...rows) => [title ? el("div", { class: "h" }, title) : null, el("div", { class: "card" }, rows)];
+const empty = (text) => el("div", { class: "empty" }, text);
+function row({ title, sub, side, onclick, chevron, cls }) {
+  return el(onclick ? "button" : "div", { class: "row " + (cls || ""), onclick, type: onclick ? "button" : null },
+    el("div", { class: "main" }, el("div", { class: "title" }, title), sub ? el("div", { class: "sub" }, sub) : null),
+    side != null ? el("div", { class: "side" }, side) : null,
+    chevron ? el("span", { class: "chev" }) : null);
+}
+const badge = (text, kind = "") => el("span", { class: "badge " + kind }, text);
+function toggle(checked, onchange) {
+  const input = el("input", { type: "checkbox", checked, onchange: (e) => onchange(e.target.checked, e.target) });
+  return el("label", { class: "switch" }, input, el("i"));
+}
+function field(label, input, hint) {
+  return el("label", { class: "f" }, el("span", {}, label), input, hint ? el("div", { class: "hint" }, hint) : null);
+}
+function select(options, value) {
+  const s = el("select", { class: "in" });
+  for (const [v, label] of options) s.append(el("option", { value: String(v) }, label));
+  s.value = String(value ?? "");
+  return s;
+}
+
+// Bottom sheet for editing; Telegram's back button closes it.
+let sheetCloseHook = null;
+/** Runs `fn` once, the next time the open sheet is closed. */
+function onSheetClose(fn) { sheetCloseHook = fn; }
+function closeSheet() {
+  const wasOpen = $("sheet").classList.contains("open");
+  $("sheet").classList.remove("open"); $("sheetBg").classList.remove("open");
+  if (canTg("6.1")) tg.BackButton.hide();
+  if (wasOpen && sheetCloseHook) { const fn = sheetCloseHook; sheetCloseHook = null; fn(); }
+}
+function openSheet(title, ...content) {
+  const sheet = $("sheet");
+  sheetCloseHook = null;
+  sheet.replaceChildren(
+    el("div", { class: "grip" }),
+    el("button", { class: "x", type: "button", onclick: closeSheet, "aria-label": "Close" }, "✕"),
+    el("h2", {}, title),
+    ...content.flat(Infinity).filter(Boolean));
+  sheet.classList.add("open"); $("sheetBg").classList.add("open");
+  sheet.scrollTop = 0;
+  if (canTg("6.1")) tg.BackButton.show();
+}
+$("sheetBg").addEventListener("click", closeSheet);
+if (tg && tg.BackButton) tg.BackButton.onClick(closeSheet);
+
+// ---------------------------------------------------------------- data cache
+const cache = {};
+async function load(key, op, force) {
+  if (force || !cache[key]) cache[key] = await api(op);
+  return cache[key];
+}
+const invalidate = (...keys) => keys.forEach((k) => delete cache[k]);
+const floorName = (floors, id) => (floors.find((f) => f.id === id) || {}).name;
+const groupLabel = (g) => g.class_name || g.title;
+const permLabel = (p) => t("perm_" + p);
+
+// ---------------------------------------------------------------- navigation
+const TABS = ["home", "announce", "calls", "staff", "groups", "roles", "floors", "invites", "stats"];
+const state = { tab: "home", callsFilter: "pending", staffFilter: "all", staffQuery: "", statsDays: 7, annSelected: new Set(), annPin: false, annText: "", invitePreset: null };
+
+function renderTabs() {
+  $("tabs").replaceChildren(...TABS.map((name) =>
+    el("button", { class: "chip" + (state.tab === name ? " on" : ""), type: "button", onclick: () => go(name) }, t("tab_" + name))));
+  const on = $("tabs").querySelector(".on");
+  if (on) on.scrollIntoView({ inline: "center", block: "nearest" });
+}
+async function go(tab) {
+  state.tab = tab;
+  closeSheet();
+  haptic();
+  await render();
+}
+let renderSeq = 0;
+async function render() {
+  renderTabs();
+  const seq = ++renderSeq;
+  const main = $("main");
+  main.replaceChildren(el("div", { class: "center" }, el("div", { class: "spinner" })));
+  try {
+    const node = await SCREENS[state.tab]();
+    if (seq === renderSeq) main.replaceChildren(...[node].flat(Infinity).filter(Boolean));
+  } catch (e) {
+    if (seq === renderSeq) main.replaceChildren(el("div", { class: "center" }, e.message || t("error")));
+  }
+  window.scrollTo(0, 0);
+}
+
+// ---------------------------------------------------------------- calls (shared)
+const STATUS_BADGE = { pending: "warn", accepted: "acc", done: "ok", closed: "" };
+function callRow(c, onChange) {
+  const badges = [badge(t("s_" + c.status), STATUS_BADGE[c.status])];
+  if (c.urgent) badges.push(badge("🚨 " + t("urgent"), "bad"));
+  if (c.escalated && c.status === "pending") badges.push(badge(t("escalated"), "bad"));
+  const info = [
+    el("div", {}, badges),
+    c.text ? el("div", { class: "mt" }, c.text) : null,
+    el("div", { class: "sub mt" },
+      `${t("from")}: ${c.requester || "—"} · ${fmtTime(c.created_at)}`,
+      c.accepter ? ` · ${t("taker")}: ${c.accepter}` : ""),
+  ];
+  const close = c.status === "pending"
+    ? el("button", { class: "btn small ghost", type: "button", onclick: (e) => act(e.target, async () => {
+        if (!(await confirmMsg(t("confirm_close")))) return;
+        await api("calls.close", { id: c.id });
+        haptic("ok"); toast(t("closed_ok")); onChange();
+      }) }, t("close_call"))
+    : null;
+  return el("div", { class: "row" },
+    el("div", { class: "main" }, el("div", { class: "title" }, `${c.role} · ${c.class}`), el("div", { class: "sub" }, info)),
+    close);
+}
+
+// ---------------------------------------------------------------- screens
+const SCREENS = {
+  async home() {
+    const d = await api("dashboard");
+    const tiles = [
+      [d.groups, t("st_groups")], [d.teachers, t("st_teachers")], [d.staff, t("st_staff")],
+      [d.calls_day, t("st_day")], [d.calls_week, t("st_week")], [d.roles, t("st_roles")],
+    ].map(([n, label]) => el("div", { class: "stat" }, el("b", {}, n), el("span", {}, label)));
+
+    const warns = [];
+    if (!d.groups) warns.push([t("w_no_groups"), "groups"]);
+    if (d.groups_not_admin) warns.push([t("w_not_admin", { n: d.groups_not_admin }), "groups"]);
+    if (d.groups_no_class) warns.push([t("w_no_class", { n: d.groups_no_class }), "groups"]);
+    if (d.groups_no_floor && d.floors) warns.push([t("w_no_floor", { n: d.groups_no_floor }), "groups"]);
+    if (!d.roles) warns.push([t("w_no_roles"), "roles"]);
+
+    return [
+      el("div", { class: "stats" }, tiles),
+      section(t("attention"), warns.length
+        ? warns.map(([text, tab]) => row({ title: "⚠️ " + text, onclick: () => go(tab), chevron: true, cls: "warnrow" }))
+        : empty(t("all_good"))),
+      el("div", { class: "btns mt" },
+        el("button", { class: "btn", type: "button", onclick: () => go("announce") }, t("q_announce")),
+        el("button", { class: "btn ghost", type: "button", onclick: () => go("invites") }, t("q_invite"))),
+      section(t("pending_calls"), d.pending.length ? d.pending.map((c) => callRow(c, render)) : empty(t("no_calls"))),
+      section(t("recent_calls"), d.recent.length ? d.recent.map((c) => callRow(c, render)) : empty(t("no_calls"))),
+    ];
+  },
+
+  async announce() {
+    const [groups, history] = await Promise.all([load("groups", "groups.list"), api("announce.history")]);
+    if (!groups.length) return section(null, empty(t("groups_hint")));
+    const sel = state.annSelected;
+    for (const id of [...sel]) if (!groups.some((g) => g.chat_id === id)) sel.delete(id);
+
+    const text = el("textarea", { class: "in", maxLength: 4096, placeholder: t("ann_ph"), value: state.annText });
+    const counter = el("div", { class: "hint count" });
+    const updateCount = () => { state.annText = text.value; counter.textContent = `${text.value.length}/4096`; };
+    text.addEventListener("input", updateCount); updateCount();
+
+    const picker = el("div");
+    const selectedLabel = el("div", { class: "hint" });
+    const grades = [...new Set(groups.map((g) => g.grade).filter(Boolean))].sort((a, b) => a - b);
+    const drawPicker = () => {
+      const all = groups.every((g) => sel.has(g.chat_id));
+      const chip = (label, on, onclick) => el("button", { class: "chip" + (on ? " on" : ""), type: "button", onclick }, label);
+      const toggleSet = (ids) => {
+        const allOn = ids.every((id) => sel.has(id));
+        ids.forEach((id) => (allOn ? sel.delete(id) : sel.add(id)));
+        haptic(); drawPicker();
+      };
+      picker.replaceChildren(
+        el("div", { class: "chips" },
+          chip(t("ann_all"), all, () => toggleSet(groups.map((g) => g.chat_id))),
+          grades.map((gr) => {
+            const ids = groups.filter((g) => g.grade === gr).map((g) => g.chat_id);
+            return chip(t("ann_grade", { g: gr }), ids.every((id) => sel.has(id)), () => toggleSet(ids));
+          })),
+        el("div", { class: "chips mt" }, groups.map((g) => chip(groupLabel(g), sel.has(g.chat_id), () => toggleSet([g.chat_id])))));
+      selectedLabel.textContent = t("ann_selected", { n: sel.size });
+    };
+    drawPicker();
+
+    const send = el("button", { class: "btn block mt", type: "button", onclick: () => act(send, async () => {
+      if (!text.value.trim()) return alertMsg(t("ann_need_text"));
+      if (!sel.size) return alertMsg(t("ann_need_groups"));
+      if (!(await confirmMsg(t("ann_confirm", { n: sel.size })))) return;
+      const r = await api("announce.send", { text: text.value, chat_ids: [...sel], pin: state.annPin });
+      haptic(r.failed.length ? "warning" : "ok");
+      toast(t("ann_sent", { sent: r.sent, total: r.total }));
+      state.annText = ""; sel.clear();
+      await render();
+      if (r.failed.length || r.pin_failed.length) {
+        await alertMsg([
+          t("ann_sent", { sent: r.sent, total: r.total }),
+          r.failed.length ? t("ann_failed", { list: r.failed.join(", ") }) : "",
+          r.pin_failed.length ? t("ann_pin_failed", { list: r.pin_failed.join(", ") }) : "",
+        ].filter(Boolean).join("\n"));
+      }
+    }) }, t("ann_send"));
+
+    const historyRows = history.map((a) => row({
+      title: a.preview || "—",
+      sub: [
+        `${fmtTime(a.created_at)} · ${a.author || "—"} · ${t("ann_groups", { n: a.groups })} `,
+        a.pinned ? badge(t("ann_pinned"), "acc") : null,
+        a.deleted ? badge(t("ann_deleted_badge"), "bad") : null,
+      ],
+      side: a.deleted || !a.groups ? null : el("button", { class: "btn small danger", type: "button", onclick: (e) => act(e.target, async () => {
+        if (!(await confirmMsg(t("ann_delete_confirm")))) return;
+        const r = await api("announce.delete", { id: a.id });
+        haptic("ok"); toast(t("ann_deleted", { n: r.deleted, total: r.total })); render();
+      }) }, t("ann_delete")),
+    }));
+
+    return [
+      el("div", { class: "h" }, t("ann_text")),
+      el("div", { class: "card pad" }, text, counter, el("div", { class: "hint" }, t("ann_media_hint"))),
+      el("div", { class: "h" }, t("ann_to")),
+      el("div", { class: "card pad" }, picker, el("div", { class: "mt" }, selectedLabel)),
+      el("div", { class: "card mt" }, row({ title: t("ann_pin"), side: toggle(state.annPin, (v) => { state.annPin = v; haptic(); }) })),
+      send,
+      section(t("ann_history"), historyRows.length ? historyRows : empty(t("ann_none"))),
+    ];
+  },
+
+  async calls() {
+    const calls = await api("calls.list", { status: state.callsFilter });
+    const seg = el("div", { class: "chips" }, [["pending", t("f_pending")], ["all", t("f_all")]].map(([v, label]) =>
+      el("button", { class: "chip" + (state.callsFilter === v ? " on" : ""), type: "button", onclick: () => { state.callsFilter = v; render(); } }, label)));
+    return [seg, section(null, calls.length ? calls.map((c) => callRow(c, render)) : empty(t("no_calls")))];
+  },
+
+  async staff() {
+    const [users, roles, floors] = await Promise.all([api("staff.list"), load("roles", "roles.list"), load("floors", "floors.list")]);
+    cache.users = users;
+    const list = el("div", { class: "card" });
+    const search = el("input", { class: "in", type: "search", placeholder: t("search"), value: state.staffQuery });
+    const filters = [["all", t("f_all")], ["admin", t("perm_admin")], ["announcer", t("perm_announcer")], ["teacher", t("perm_teacher")],
+      ...roles.map((r) => ["role:" + r.id, `${r.emoji} ${r.name}`])];
+    const chips = el("div", { class: "chips mt" });
+
+    const matches = (u) => {
+      const f = state.staffFilter;
+      if (f === "admin" && !u.is_admin) return false;
+      if (f === "announcer" && !u.can_announce) return false;
+      if (f === "teacher" && !u.is_teacher) return false;
+      if (f.startsWith("role:") && !u.roles.some((r) => r.role_id === Number(f.slice(5)))) return false;
+      const q = state.staffQuery.trim().toLowerCase().replace(/^@/, "");
+      return !q || u.name.toLowerCase().includes(q) || (u.username || "").toLowerCase().includes(q) || String(u.id).includes(q);
+    };
+    const userBadges = (u) => [
+      u.is_admin ? badge(permLabel("admin"), "acc") : null,
+      u.can_announce ? badge(permLabel("announcer")) : null,
+      u.is_teacher ? badge(permLabel("teacher"), "ok") : null,
+      u.roles.map((sr) => {
+        const r = roles.find((x) => x.id === sr.role_id);
+        return r ? badge(`${r.emoji} ${r.name}${sr.floor_id ? " · " + (floorName(floors, sr.floor_id) || "") : ""}`) : null;
+      }),
+    ];
+    const draw = () => {
+      chips.replaceChildren(...filters.map(([v, label]) =>
+        el("button", { class: "chip" + (state.staffFilter === v ? " on" : ""), type: "button", onclick: () => { state.staffFilter = v; haptic(); draw(); } }, label)));
+      const shown = users.filter(matches);
+      list.replaceChildren(...(shown.length ? shown.map((u) => row({
+        title: [u.name, u.is_me ? " · " + t("you") : ""],
+        sub: [u.username ? "@" + u.username + " " : "", el("div", {}, userBadges(u))],
+        onclick: () => openUser(u, roles, floors),
+        chevron: true,
+      })) : [empty(t("no_users"))]));
+    };
+    search.addEventListener("input", () => { state.staffQuery = search.value; draw(); });
+    draw();
+    return [search, chips, el("div", { class: "mt" }), list, el("div", { class: "hint mt" }, t("staff_hint"))];
+  },
+
+  async groups() {
+    const [groups, floors] = await Promise.all([load("groups", "groups.list", true), load("floors", "floors.list")]);
+    const refresh = el("button", { class: "btn ghost block", type: "button", onclick: () => act(refresh, async () => {
+      cache.groups = await api("groups.refresh"); haptic("ok"); toast(t("refreshed")); render();
+    }) }, "🔄 " + t("refresh"));
+    const rows = groups.map((g) => row({
+      title: groupLabel(g),
+      sub: [
+        g.class_name && g.title !== g.class_name ? g.title + " " : "",
+        el("div", {},
+          g.floor_id ? badge("🏢 " + floorName(floors, g.floor_id)) : badge(t("no_floor"), "warn"),
+          badge(g.lang.toUpperCase()),
+          g.bot_is_admin ? null : badge(t("bot_not_admin"), "bad"),
+          g.class_name ? null : badge(t("no_class"), "warn")),
+      ],
+      onclick: () => openGroup(g, floors),
+      chevron: true,
+    }));
+    return [refresh, section(null, rows.length ? rows : empty(t("groups_hint")))];
+  },
+
+  async roles() {
+    const roles = await load("roles", "roles.list", true);
+    const rows = roles.map((r) => row({
+      title: `${r.emoji} ${r.name}`,
+      sub: [[r.key, ...r.aliases].map((w) => "#" + w).join(" "), " ", r.floor_based ? badge("🏢 " + t("floor_based")) : null],
+      side: t("staff_n", { n: r.staff_count }),
+      onclick: () => openRole(r),
+      chevron: true,
+    }));
+    return [
+      el("button", { class: "btn block", type: "button", onclick: () => openRole(null) }, "➕ " + t("new_role")),
+      section(null, rows.length ? rows : empty(t("no_roles"))),
+    ];
+  },
+
+  async floors() {
+    const floors = await load("floors", "floors.list", true);
+    const name = el("input", { class: "in", placeholder: t("floor_ph"), maxLength: 64 });
+    const add = el("button", { class: "btn", type: "button", onclick: () => act(add, async () => {
+      if (!name.value.trim()) return;
+      await api("floors.create", { name: name.value });
+      invalidate("floors"); haptic("ok"); toast(t("saved")); render();
+    }) }, t("add"));
+    const rows = floors.map((f) => row({
+      title: "🏢 " + f.name,
+      sub: `${t("classes")}: ${f.classes.join(", ") || "—"}`,
+      side: t("staff_n", { n: f.staff_count }),
+      onclick: () => openFloor(f),
+      chevron: true,
+    }));
+    return [
+      el("div", { class: "h" }, t("new_floor")),
+      el("div", { class: "card pad" }, el("div", { class: "btns" }, el("div", { style: "flex:3" }, name), add)),
+      section(null, rows.length ? rows : empty(t("no_floors"))),
+    ];
+  },
+
+  async invites() {
+    const [invites, roles, floors] = await Promise.all([api("invites.list"), load("roles", "roles.list"), load("floors", "floors.list")]);
+    const kinds = [["teacher", t("perm_teacher")], ["announcer", t("perm_announcer")], ["admin", t("perm_admin")],
+      ...roles.map((r) => ["role:" + r.id, `${r.emoji} ${r.name}`])];
+    const preset = state.invitePreset; state.invitePreset = null;
+    const kind = select(kinds, preset || "teacher");
+    const floor = select([["", t("inv_floor_any")], ...floors.map((f) => [f.id, f.name])], "");
+    const floorField = field(t("inv_floor"), floor);
+    const uses = select([1, 5, 10, 30, 50, 100, 300].map((n) => [n, String(n)]), 1);
+    const syncFloor = () => { floorField.style.display = kind.value.startsWith("role:") && floors.length ? "" : "none"; };
+    kind.addEventListener("change", syncFloor); syncFloor();
+
+    const result = el("div");
+    const create = el("button", { class: "btn block mt", type: "button", onclick: () => act(create, async () => {
+      const args = { uses: Number(uses.value) };
+      if (kind.value.startsWith("role:")) {
+        Object.assign(args, { kind: "role", role_id: Number(kind.value.slice(5)) });
+        if (floor.value) args.floor_id = Number(floor.value);
+      } else args.kind = kind.value;
+      const r = await api("invites.create", args);
+      haptic("ok");
+      result.replaceChildren(el("div", { class: "card pad mt" },
+        el("div", {}, t("inv_ready")), el("div", { class: "linkbox" }, r.link),
+        el("div", { class: "btns" },
+          el("button", { class: "btn", type: "button", onclick: () => copyText(r.link) }, t("copy")),
+          el("button", { class: "btn ghost", type: "button", onclick: () => share(r.link) }, t("share")))));
+      const list = await api("invites.list"); activeBox.replaceChildren(...activeRows(list));
+    }) }, t("inv_create"));
+
+    const activeRows = (list) => list.length ? list.map((i) => row({
+      title: i.label + (i.floor ? ` · ${i.floor}` : ""),
+      sub: [t("uses_left", { n: i.uses_left }), " · ", el("span", { style: "font-family:monospace" }, i.code)],
+      side: el("div", { class: "btns" },
+        el("button", { class: "btn small ghost", type: "button", onclick: () => copyText(i.link) }, t("copy")),
+        el("button", { class: "btn small danger", type: "button", onclick: (e) => act(e.target, async () => {
+          if (!(await confirmMsg(t("revoke_confirm")))) return;
+          await api("invites.revoke", { code: i.code });
+          haptic("ok"); toast(t("revoked")); render();
+        }) }, t("revoke"))),
+    })) : [empty(t("inv_none"))];
+    const activeBox = el("div", { class: "card" }, activeRows(invites));
+
+    return [
+      el("div", { class: "h" }, t("inv_new")),
+      el("div", { class: "card pad" }, field(t("inv_for"), kind), floorField, field(t("inv_uses"), uses), create),
+      result,
+      el("div", { class: "h" }, t("inv_active")),
+      activeBox,
+    ];
+  },
+
+  async stats() {
+    const s = await api("stats", { days: state.statsDays });
+    const seg = el("div", { class: "chips" }, [1, 7, 30, 90].map((d) =>
+      el("button", { class: "chip" + (state.statsDays === d ? " on" : ""), type: "button", onclick: () => { state.statsDays = d; render(); } }, t("days", { n: d }))));
+    if (!s.total) return [seg, section(null, empty(t("no_stats")))];
+    const max = Math.max(...s.top_classes.map((c) => c.total), 1);
+    return [
+      seg,
+      el("div", { class: "stats mt" }, el("div", { class: "stat" }, el("b", {}, s.total), el("span", {}, t("total")))),
+      el("div", { class: "h" }, t("by_role")),
+      el("div", { class: "card" }, el("table", { class: "t" },
+        el("tr", {}, el("th", {}, t("role")), el("th", {}, t("c_total")), el("th", {}, t("c_acc")), el("th", {}, t("c_avg")), el("th", {}, t("c_esc"))),
+        s.per_role.map((r) => el("tr", {}, el("td", {}, r.title), el("td", {}, r.total), el("td", {}, r.accepted), el("td", {}, r.avg_minutes), el("td", {}, r.escalated))))),
+      el("div", { class: "h" }, t("top_classes")),
+      el("div", { class: "card" }, s.top_classes.map((c) => el("div", { class: "barrow" },
+        el("span", {}, c.label), el("div", { class: "bar", style: `width:${(c.total / max) * 100}%` }), el("b", { style: "text-align:right" }, c.total)))),
+    ];
+  },
+};
+
+// ---------------------------------------------------------------- edit sheets
+function openUser(u, roles, floors) {
+  const permRow = (perm) => row({
+    title: permLabel(perm),
+    sub: perm === "admin" && u.is_super ? t("main_admin") : null,
+    side: toggle(u[{ admin: "is_admin", announcer: "can_announce", teacher: "is_teacher" }[perm]], (value, input) => act(null, async () => {
+      try {
+        Object.assign(u, await api("staff.set_perm", { user_id: u.id, perm, value }));
+        haptic("ok"); toast(t("saved"));
+      } catch (e) { input.checked = !value; throw e; }
+    })),
+  });
+  const rolesBox = el("div", { class: "card" });
+  const drawRoles = () => rolesBox.replaceChildren(...(u.roles.length ? u.roles.map((sr) => {
+    const r = roles.find((x) => x.id === sr.role_id);
+    return row({
+      title: r ? `${r.emoji} ${r.name}` : "❔",
+      sub: sr.floor_id ? floorName(floors, sr.floor_id) : t("all_floors"),
+      side: el("button", { class: "btn small danger", type: "button", onclick: (e) => act(e.target, async () => {
+        Object.assign(u, await api("staff.remove_role", { user_id: u.id, role_id: sr.role_id, floor_id: sr.floor_id }));
+        haptic("ok"); drawRoles();
+      }) }, "✕"),
+    });
+  }) : [empty("—")]));
+  drawRoles();
+
+  const roleSel = select(roles.map((r) => [r.id, `${r.emoji} ${r.name}`]), roles[0] && roles[0].id);
+  const floorSel = select([["", t("all_floors")], ...floors.map((f) => [f.id, f.name])], "");
+  const addBtn = el("button", { class: "btn block mt", type: "button", onclick: () => act(addBtn, async () => {
+    const args = { user_id: u.id, role_id: Number(roleSel.value) };
+    if (floorSel.value) args.floor_id = Number(floorSel.value);
+    Object.assign(u, await api("staff.add_role", args));
+    haptic("ok"); toast(t("saved")); drawRoles();
+  }) }, t("add"));
+
+  openSheet(u.name + (u.is_me ? ` · ${t("you")}` : ""),
+    el("div", { class: "hint" }, [u.username ? "@" + u.username : null, "ID " + u.id].filter(Boolean).join(" · ")),
+    ...section(t("rights"), ["admin", "announcer", "teacher"].map(permRow)),
+    ...section(t("user_roles"), rolesBox),
+    el("div", { class: "h" }, t("add_role")),
+    roles.length
+      ? el("div", { class: "card pad" }, field(t("role"), roleSel), floors.length ? field(t("floor"), floorSel) : null, addBtn)
+      : el("div", { class: "card" }, empty(t("no_roles_yet"))));
+  // The list behind the sheet shows badges; refresh it when the sheet closes.
+  onSheetClose(() => { if (state.tab === "staff") render(); });
+}
+
+function openGroup(g, floors) {
+  const cls = el("input", { class: "in", value: g.class_name || "", placeholder: "7-B", maxLength: 16 });
+  const floor = select([["", t("no_floor")], ...floors.map((f) => [f.id, f.name])], g.floor_id ?? "");
+  const lang = select([["uz", "O'zbekcha"], ["ru", "Русский"], ["en", "English"]], g.lang);
+  const save = el("button", { class: "btn block mt", type: "button", onclick: () => act(save, async () => {
+    const args = { chat_id: g.chat_id, floor_id: floor.value ? Number(floor.value) : null, lang: lang.value };
+    if (cls.value.trim() && cls.value.trim() !== g.class_name) args.class_name = cls.value;
+    await api("groups.update", args);
+    invalidate("groups", "floors"); haptic("ok"); toast(t("saved")); closeSheet(); render();
+  }) }, t("save"));
+  openSheet(groupLabel(g),
+    el("div", { class: "hint" }, g.title),
+    field(t("class"), cls), field(t("floor"), floor), field(t("lang"), lang), save);
+}
+
+function openRole(r) {
+  const key = el("input", { class: "in", placeholder: "cleaner", maxLength: 32, autocapitalize: "off" });
+  const emoji = el("input", { class: "in", value: r ? r.emoji : "", placeholder: "🧹", maxLength: 16 });
+  const name = el("input", { class: "in", value: r ? r.name : "", placeholder: "Tozalovchi", maxLength: 64 });
+  if (!r) {
+    const create = el("button", { class: "btn block mt", type: "button", onclick: () => act(create, async () => {
+      await api("roles.create", { key: key.value, emoji: emoji.value, name: name.value });
+      invalidate("roles"); haptic("ok"); toast(t("saved")); closeSheet(); render();
+    }) }, t("create"));
+    return openSheet(t("new_role"), field(t("key"), key, t("key_hint")), field(t("emoji"), emoji), field(t("name"), name), create);
+  }
+  const aliases = el("input", { class: "in", value: r.aliases.join(" "), autocapitalize: "off" });
+  let floorBased = r.floor_based;
+  const save = el("button", { class: "btn block mt", type: "button", onclick: () => act(save, async () => {
+    await api("roles.update", {
+      id: r.id, emoji: emoji.value, name: name.value, floor_based: floorBased,
+      aliases: aliases.value.split(/[\s,]+/).filter(Boolean),
+    });
+    invalidate("roles"); haptic("ok"); toast(t("saved")); closeSheet(); render();
+  }) }, t("save"));
+  const del = el("button", { class: "btn danger block", type: "button", onclick: () => act(del, async () => {
+    if (!(await confirmMsg(t("del_role_confirm", { name: r.name })))) return;
+    await api("roles.delete", { id: r.id });
+    invalidate("roles"); haptic("ok"); closeSheet(); render();
+  }) }, t("delete"));
+  const invite = el("button", { class: "btn ghost block mt", type: "button", onclick: () => { state.invitePreset = "role:" + r.id; go("invites"); } }, t("invite_for_role"));
+  openSheet(`${r.emoji} ${r.name}`,
+    el("div", { class: "hint" }, "#" + r.key),
+    field(t("emoji"), emoji), field(t("name"), name), field(t("aliases"), aliases, t("aliases_hint")),
+    el("div", { class: "card mt" }, row({ title: t("floor_based"), sub: t("floor_based_hint"), side: toggle(floorBased, (v) => { floorBased = v; haptic(); }) })),
+    save, invite, del);
+}
+
+function openFloor(f) {
+  const name = el("input", { class: "in", value: f.name, maxLength: 64 });
+  const save = el("button", { class: "btn block mt", type: "button", onclick: () => act(save, async () => {
+    await api("floors.rename", { id: f.id, name: name.value });
+    invalidate("floors"); haptic("ok"); toast(t("saved")); closeSheet(); render();
+  }) }, t("save"));
+  const del = el("button", { class: "btn danger block", type: "button", onclick: () => act(del, async () => {
+    if (!(await confirmMsg(t("del_floor_confirm", { name: f.name })))) return;
+    await api("floors.delete", { id: f.id });
+    invalidate("floors", "groups"); haptic("ok"); closeSheet(); render();
+  }) }, t("delete"));
+  openSheet("🏢 " + f.name,
+    el("div", { class: "hint" }, `${t("classes")}: ${f.classes.join(", ") || "—"}`),
+    field(t("rename"), name), save, del);
+}
+
+// ---------------------------------------------------------------- start
+(async function start() {
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    if (canTg("6.1")) { tg.setHeaderColor("secondary_bg_color"); tg.setBackgroundColor("secondary_bg_color"); }
+  }
+  if (!initData) {
+    $("tabs").remove();
+    $("main").replaceChildren(el("div", { class: "center" }, t("open_in_tg")));
+    return;
+  }
+  try {
+    const me = await api("me");
+    L = T[me.lang] ? me.lang : "uz";
+    document.documentElement.lang = L;
+    $("who").textContent = me.name;
+    await render();
+  } catch (e) {
+    $("tabs").remove();
+    $("main").replaceChildren(el("div", { class: "center" }, e.message || t("error")));
+  }
+})();
+</script>
+</body>
+</html>

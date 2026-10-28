@@ -3,11 +3,13 @@ import logging
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
-from aiogram.types import BotCommand, BotCommandScopeChat
+from aiogram.types import BotCommand, BotCommandScopeChat, MenuButtonDefault, MenuButtonWebApp, WebAppInfo
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.config import settings
 from bot.db.models import User
+from bot.i18n import t
 
 log = logging.getLogger(__name__)
 
@@ -43,18 +45,26 @@ def as_commands(items: list[tuple[str, str]]) -> list[BotCommand]:
     return [BotCommand(command=c, description=d) for c, d in items]
 
 
-async def set_user_menu(bot: Bot, user: User) -> None:
-    """Admins get the admin list in their own private chat; for others that override is removed."""
+async def set_user_menu(bot: Bot, user: User, webapp_url: str | None = None) -> None:
+    """Admins get the admin command list and, when the Mini App is deployed, a "Panel" button
+    next to the message field that opens it. For everyone else those overrides are removed."""
+    webapp_url = webapp_url or settings.webapp_url
     scope = BotCommandScopeChat(chat_id=user.id)
     try:
         if user.is_admin:
             await bot.set_my_commands(as_commands(ADMIN_COMMANDS[user.lang]), scope=scope)
+            if webapp_url:
+                await bot.set_chat_menu_button(user.id, MenuButtonWebApp(
+                    text=t(user.lang, "menu_panel"), web_app=WebAppInfo(url=webapp_url),
+                ))
         else:
             await bot.delete_my_commands(scope=scope)
+            if webapp_url:
+                await bot.set_chat_menu_button(user.id, MenuButtonDefault())
     except TelegramAPIError as e:
         log.warning("Cannot update menu for %s: %s", user.id, e)
 
 
-async def sync_admin_menus(bot: Bot, session: AsyncSession) -> None:
+async def sync_admin_menus(bot: Bot, session: AsyncSession, webapp_url: str | None = None) -> None:
     for admin in (await session.scalars(select(User).where(User.is_admin))).all():
-        await set_user_menu(bot, admin)
+        await set_user_menu(bot, admin, webapp_url)
